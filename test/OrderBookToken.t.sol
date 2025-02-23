@@ -3,11 +3,9 @@ pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
 import {OrderBookToken} from "../src/OrderBookToken.sol";
-import {MonthMapping} from "../src/types/Mapping.sol";
 
 contract OrderBookTokenTest is Test {
     OrderBookToken public orderBook;
-    MonthMapping public monthMapping;
 
     // Mainnet token addresses
     address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
@@ -29,13 +27,9 @@ contract OrderBookTokenTest is Test {
         
         // Fork mainnet
         vm.createSelectFork("https://eth-mainnet.g.alchemy.com/v2/Ea4M-V84UObD22z2nNlwDD9qP8eqZuSI",21197642);
-        
-        // Deploy MonthMapping
-        monthMapping = new MonthMapping();
 
         // Deploy OrderBookToken
         orderBook = new OrderBookToken(
-            address(monthMapping),
             WETH,
             month,
             year
@@ -43,12 +37,36 @@ contract OrderBookTokenTest is Test {
         
         console.log("OrderBookToken deployed at:", address(orderBook));
     }
+
+    function stringToAddress(string memory _addr) public pure returns (address) {
+        bytes memory temp = bytes(_addr);
+        require(temp.length == 42, "Invalid address length"); // Must be "0x" + 40 characters
+
+        uint160 addrUint = 0;
+        for (uint256 i = 2; i < 42; i++) { // Skip "0x"
+            uint8 digit = uint8(temp[i]);
+
+            if (digit >= 48 && digit <= 57) {
+                digit -= 48; // 0-9
+            } else if (digit >= 65 && digit <= 70) {
+                digit -= 55; // A-F
+            } else if (digit >= 97 && digit <= 102) {
+                digit -= 87; // a-f
+            } else {
+                revert("Invalid character in address");
+            }
+
+            addrUint = addrUint * 16 + digit;
+        }
+
+        return address(addrUint);
+    }
     
     function testTokenNameAndSymbol() public {
         console.log("\nTesting token name and symbol...");
         
         // Expected values
-        string memory expectedName = "CA WETH";
+        string memory expectedName = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
         string memory expectedSymbol = "WETHMAR2025";
         
         // Get actual values
@@ -61,7 +79,7 @@ contract OrderBookTokenTest is Test {
         console.log("Actual symbol:", actualSymbol);
         
         // Assert
-        assertEq(actualName, expectedName, "Token name should match expected value");
+        assertEq(stringToAddress(actualName), WETH, "Token name should match expected value");
         assertEq(actualSymbol, expectedSymbol, "Token symbol should match expected value");
     }
     
@@ -87,44 +105,4 @@ contract OrderBookTokenTest is Test {
         
         assertEq(balanceAfter, amount, "User balance should match minted amount");
     }
-    
-    // function testTokenParameters() public {
-    //     console.log("\nTesting token parameters...");
-        
-    //     address actualDebtToken = OrderBookToken.debtToken();
-    //     address actualCollateralToken = OrderBookToken.collateralToken();
-    //     uint256 actualRate = OrderBookToken.rate();
-        
-    //     console.log("Debt Token (WETH):");
-    //     console.log("Expected:", WETH);
-    //     console.log("Actual:", actualDebtToken);
-        
-    //     console.log("Collateral Token (USDC):");
-    //     console.log("Expected:", USDC);
-    //     console.log("Actual:", actualCollateralToken);
-        
-    //     console.log("Rate:");
-    //     console.log("Expected:", rate);
-    //     console.log("Actual:", actualRate);
-        
-    //     assertEq(actualDebtToken, WETH, "Debt token should be WETH");
-    //     assertEq(actualCollateralToken, USDC, "Collateral token should be USDC");
-    //     assertEq(actualRate, rate, "Rate should match");
-    // }
-    
-    // function testMaturityDate() public {
-    //     console.log("\nTesting maturity date...");
-    //     (string memory maturityMonth, uint256 maturityYear) = OrderBookToken.getMaturityDate();
-        
-    //     console.log("Maturity month:");
-    //     console.log("Expected: MARCH");
-    //     console.log("Actual:", maturityMonth);
-        
-    //     console.log("Maturity year:");
-    //     console.log("Expected:", year);
-    //     console.log("Actual:", maturityYear);
-        
-    //     assertEq(maturityMonth, "MARCH", "Maturity month should be MARCH");
-    //     assertEq(maturityYear, 2025, "Maturity year should be 2025");
-    // }
 }

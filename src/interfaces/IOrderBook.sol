@@ -4,12 +4,8 @@ pragma solidity ^0.8.26;
 type Price is uint64;
 type OrderId is uint48;
 type Quantity is uint128;
-enum Side {
-    BUY,
-    SELL
-}
 
-import {Status} from "../types/Types.sol";
+import {Status, Side} from "../types/Types.sol";
 
 interface IOrderBook {
     struct Order {

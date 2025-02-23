@@ -2,99 +2,41 @@
 pragma solidity ^0.8.13;
 
 import {ERC20} from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
-import {MonthMapping} from "./types/Mapping.sol";
+import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import "openzeppelin-contracts/contracts/utils/Strings.sol";
+import {Uint256Library} from "./types/Types.sol";
 
-// interface read symbol token ERC20
-interface IERC20Symbol {
-    function symbol() external view returns (string memory);
-}
+using Uint256Library for uint256;
+using Strings for address;
 
 contract OrderBookToken is ERC20 {
-    // error
-    error InvalidMonth();
-
-    // parameters
-    address public token;
-    uint256 public maturityMonth;
-    uint256 public maturityYear;
-    MonthMapping public monthMapping;
 
     constructor(
-        address _monthMapping,
         address _token,
-        string memory _month,
-        uint256 _year
+        string memory _maturityMonth,
+        uint256 _maturityYear
     ) ERC20(
-        generateTokenName(_token),
-        generateTokenSymbol(_token, _month, _year)
+        _token.toHexString(),
+        generateTokenSymbol(_token, _maturityMonth, _maturityYear)
     ) {
-        token = _token;
-        monthMapping = _monthMapping;
-        
-        // set maturity
-        uint256 monthNumber = monthMapping.getMonthNumber(_month);
-        if (monthNumber == 0) revert InvalidMonth();
-        maturityMonth = monthNumber;
-        maturityYear = _year;
-    }
-
-    function generateTokenName(
-        address _token
-    ) internal view returns (string memory) {
-        string memory symbol = getTokenPair(_token);
-        return string(
-            abi.encodePacked(
-                "CA ",
-                symbol
-            )
-        );
     }
 
     function generateTokenSymbol(
         address _token,
-        string memory _month,
-        uint256 _year
+        string memory _maturityMonth,
+        uint256 _maturityYear
     ) internal view returns (string memory) {
-        string memory symbol = getTokenPair(_token);
         return string(
             abi.encodePacked(
-                symbol,
-                _month,
-                uint2str(_year)
+                IERC20Metadata(_token).symbol(),
+                _maturityMonth,
+                _maturityYear.toString()
             )
         );
-    }
-
-    function getTokenPair(address _token) internal view returns (string memory) {
-        string memory tokenSymbol = IERC20Symbol(_token).symbol();
-        return string(abi.encodePacked(tokenSymbol));
-    }
-
-    function uint2str(uint256 _i) internal pure returns (string memory) {
-        if (_i == 0) {
-            return "0";
-        }
-        uint256 temp = _i;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        bytes memory buffer = new bytes(digits);
-        while (_i != 0) {
-            digits -= 1;
-            buffer[digits] = bytes1(uint8(48 + uint256(_i % 10)));
-            _i /= 10;
-        }
-        return string(buffer);
     }
     
     function decimals() public pure override returns (uint8) {
         return 18;
-    }
-    
-    function getMaturityDate() public view returns (string memory, uint256) {
-        return (monthMapping.getFullMonthName(maturityMonth), maturityYear);
     }
     
     function mint(address to, uint256 amount) public {

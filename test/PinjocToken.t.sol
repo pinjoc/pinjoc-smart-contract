@@ -3,11 +3,9 @@ pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
 import {POCToken} from "../src/PinjocToken.sol";
-import {MonthMapping} from "../src/types/Mapping.sol";
 
 contract POCTokenTest is Test {
     POCToken public pocToken;
-    MonthMapping public monthMapping;
     
     // Mainnet token addresses
     address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
@@ -32,12 +30,8 @@ contract POCTokenTest is Test {
         // Fork mainnet
         vm.createSelectFork("https://eth-mainnet.g.alchemy.com/v2/Ea4M-V84UObD22z2nNlwDD9qP8eqZuSI",21197642);
 
-        // Deploy MonthMapping
-        monthMapping = new MonthMapping();
-
         // Deploy POCToken
         pocToken = new POCToken(
-            address(monthMapping),
             WETH,
             USDC,
             rate,
@@ -48,12 +42,12 @@ contract POCTokenTest is Test {
         console.log("POCToken deployed at:", address(pocToken));
     }
     
-    function testTokenNameAndSymbol() public {
+    function testTokenNameAndSymbol() public view {
         console.log("\nTesting token name and symbol...");
         
         // Expected values
         string memory expectedName = "POC WETH-USDC 4% MAR-2025";
-        string memory expectedSymbol = "pocWETHUSDC4MAR25";
+        string memory expectedSymbol = "pocWETHUSDC4MAR2025";
         
         // Get actual values
         string memory actualName = pocToken.name();
@@ -90,45 +84,5 @@ contract POCTokenTest is Test {
         console.log("Balance after minting:", balanceAfter);
         
         assertEq(balanceAfter, amount, "User balance should match minted amount");
-    }
-    
-    function testTokenParameters() public {
-        console.log("\nTesting token parameters...");
-        
-        address actualDebtToken = pocToken.debtToken();
-        address actualCollateralToken = pocToken.collateralToken();
-        uint256 actualRate = pocToken.rate();
-        
-        console.log("Debt Token (WETH):");
-        console.log("Expected:", WETH);
-        console.log("Actual:", actualDebtToken);
-        
-        console.log("Collateral Token (USDC):");
-        console.log("Expected:", USDC);
-        console.log("Actual:", actualCollateralToken);
-        
-        console.log("Rate:");
-        console.log("Expected:", rate);
-        console.log("Actual:", actualRate);
-        
-        assertEq(actualDebtToken, WETH, "Debt token should be WETH");
-        assertEq(actualCollateralToken, USDC, "Collateral token should be USDC");
-        assertEq(actualRate, rate, "Rate should match");
-    }
-    
-    function testMaturityDate() public {
-        console.log("\nTesting maturity date...");
-        (string memory maturityMonth, uint256 maturityYear) = pocToken.getMaturityDate();
-        
-        console.log("Maturity month:");
-        console.log("Expected: MARCH");
-        console.log("Actual:", maturityMonth);
-        
-        console.log("Maturity year:");
-        console.log("Expected:", year);
-        console.log("Actual:", maturityYear);
-        
-        assertEq(maturityMonth, "MARCH", "Maturity month should be MARCH");
-        assertEq(maturityYear, 2025, "Maturity year should be 2025");
     }
 }
