@@ -1,14 +1,5 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.26;
-
-type OrderId is uint48;
-type Quantity is uint128;
-type PoolId is bytes32;
-
-enum Side {
-    BUY,
-    SELL
-}
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.28;
 
 enum Status {
     OPEN,
@@ -18,7 +9,30 @@ enum Status {
     EXPIRED
 }
 
-struct PoolKey {
-    address baseCurrency;
-    address quoteCurrency;
+/// @notice Enum representing the side of an lending order
+enum LendingOrderType {
+    LEND,
+    BORROW
 }
+
+/// @notice Enum representing the side of an token order
+enum TokenOrderType {
+    BUY,
+    SELL
+}
+
+library LendingOrderTypeLibrary {
+    function opposite(LendingOrderType lendingOrderType) internal pure returns (LendingOrderType) {
+        return lendingOrderType == LendingOrderType.LEND ? LendingOrderType.BORROW : LendingOrderType.LEND;
+    }
+}
+
+library TokenOrderTypeLibrary {
+    function opposite(TokenOrderType tokenOrderType) internal pure returns (TokenOrderType) {
+        return tokenOrderType == TokenOrderType.BUY ? TokenOrderType.SELL : TokenOrderType.BUY;
+    }
+}
+
+
+using LendingOrderTypeLibrary for LendingOrderType global;
+using TokenOrderTypeLibrary for TokenOrderType global;
