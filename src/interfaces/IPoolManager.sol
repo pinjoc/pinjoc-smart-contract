@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {PoolKey, PoolId, Currency, Price} from "../types/types.sol";
+import {PoolKey, PoolId} from "../types/types.sol";
+import {Price} from "../libraries/BokkyPooBahsRedBlackTreeLibrary.sol";
+import {Currency} from "../types/currency.sol";
 import {IOrderBook} from "./IOrderBook.sol";
 
 interface IPoolManager {

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.26;
 
-import {PoolKey, Price, Quantity, Side, OrderId} from "../types/types.sol";
+import {PoolKey, Quantity, Side, OrderId} from "../types/types.sol";
+import {Price} from "../libraries/BokkyPooBahsRedBlackTreeLibrary.sol";
 
 interface IGTXRouter {
     function placeOrder(

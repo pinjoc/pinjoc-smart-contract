@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Currency} from "../types/types.sol";
+import {Currency} from "../types/currency.sol";
 
 interface IBalanceManager {
     event Deposit(address indexed user, uint256 indexed id, uint256 amount);
