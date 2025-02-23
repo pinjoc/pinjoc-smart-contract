@@ -3,9 +3,11 @@ pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
 import {POCToken} from "../src/PinjocToken.sol";
+import {MonthMapping} from "../src/types/Mapping.sol";
 
 contract POCTokenTest is Test {
     POCToken public pocToken;
+    MonthMapping public monthMapping;
     
     // Mainnet token addresses
     address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
@@ -29,9 +31,13 @@ contract POCTokenTest is Test {
         
         // Fork mainnet
         vm.createSelectFork("https://eth-mainnet.g.alchemy.com/v2/Ea4M-V84UObD22z2nNlwDD9qP8eqZuSI",21197642);
-        
+
+        // Deploy MonthMapping
+        monthMapping = new MonthMapping();
+
         // Deploy POCToken
         pocToken = new POCToken(
+            address(monthMapping),
             WETH,
             USDC,
             rate,

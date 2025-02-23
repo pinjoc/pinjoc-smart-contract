@@ -3,10 +3,12 @@ pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
 import {OrderBookToken} from "../src/OrderBookToken.sol";
+import {MonthMapping} from "../src/types/Mapping.sol";
 
 contract OrderBookTokenTest is Test {
     OrderBookToken public orderBook;
-    
+    MonthMapping public monthMapping;
+
     // Mainnet token addresses
     address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
@@ -28,8 +30,12 @@ contract OrderBookTokenTest is Test {
         // Fork mainnet
         vm.createSelectFork("https://eth-mainnet.g.alchemy.com/v2/Ea4M-V84UObD22z2nNlwDD9qP8eqZuSI",21197642);
         
+        // Deploy MonthMapping
+        monthMapping = new MonthMapping();
+
         // Deploy OrderBookToken
         orderBook = new OrderBookToken(
+            address(monthMapping),
             WETH,
             month,
             year
