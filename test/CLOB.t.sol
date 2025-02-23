@@ -178,4 +178,46 @@ contract CLOBTest is Test {
         console.log("User Locked Balance:", lockedBalance);
         vm.stopPrank();
     }
+
+    function testCancelOrder() public {
+        PoolKey memory key = PoolKey(
+            address(Currency.unwrap(weth)),
+            address(Currency.unwrap(usdc))
+        );
+        Price price = Price.wrap(3000 * 10 ** 8);
+        Quantity quantity = Quantity.wrap(10 * 10 ** 18);
+        uint256 amount = 3000 * 10 * 10 ** 6;
+        Side side = Side.BUY;
+
+        // Place an order first
+        vm.startPrank(user);
+        IERC20(Currency.unwrap(usdc)).approve(address(balanceManager), amount);
+        balanceManager.deposit(usdc, amount);
+        OrderId orderId = router.placeOrder(key, price, quantity, side);
+        router.cancelOrder(key, side, price, orderId);
+        vm.stopPrank();
+
+        (uint48 orderCount, uint256 totalVolume) = router.getOrderQueue(
+            key,
+            side,
+            price
+        );
+        console.log("Order Count:", orderCount);
+        console.log("Total Volume:", totalVolume);
+
+        assertEq(orderCount, 0);
+        assertEq(totalVolume, 0);
+
+        // Check the balance and locked balance from the balance manager
+        uint256 balance = balanceManager.getBalance(user, weth);
+        uint256 lockedBalance = balanceManager.getLockedBalance(
+            user,
+            address(poolManager.getPool(key).orderBook),
+            weth
+        );
+
+        console.log("User Balance:", balance);
+        console.log("User Locked Balance:", lockedBalance);
+        vm.stopPrank();
+    }
 }
