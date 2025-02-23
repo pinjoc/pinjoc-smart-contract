@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.26;
 
 import {Test, console} from "forge-std/Test.sol";
 import "../src/mocks/MockUSDC.sol";
@@ -189,5 +189,124 @@ contract CLOBTest is Test {
         uint256 maxOrderAmount = 100 ether;
         poolManager.createPool(key, lotSize, maxOrderAmount);
     }
-    
+
+    function testPlaceMarketOrderWithDeposit() public {
+        PoolKey memory key = PoolKey(
+            address(Currency.unwrap(weth)),
+            address(Currency.unwrap(usdc))
+        );
+        Price price = Price.wrap(3000 * 10 ** 8);
+        Price price2 = Price.wrap(3500 * 10 ** 8);
+        Quantity quantity = Quantity.wrap(1 * 10 ** 18);
+        // Quantity quantity2 = Quantity.wrap(1 * 10 ** 16);
+
+        vm.startPrank(alice);
+        mockWETH.mint(alice, initialBalanceWETH);
+        IERC20(Currency.unwrap(weth)).approve(
+            address(balanceManager),
+            initialBalanceWETH
+        );
+        // balanceManager.deposit(weth, initialBalanceWETH);
+        router.placeOrderWithDeposit(
+            key,
+            price,
+            Quantity.wrap(Quantity.unwrap(quantity) / 2),
+            Side.SELL
+        );
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        mockWETH.mint(bob, initialBalanceWETH);
+        IERC20(Currency.unwrap(weth)).approve(
+            address(balanceManager),
+            initialBalanceWETH
+        );
+        // balanceManager.deposit(weth, initialBalanceWETH);
+        router.placeOrderWithDeposit(
+            key,
+            price2,
+            Quantity.wrap(2 * Quantity.unwrap(quantity)),
+            Side.SELL
+        );
+        vm.stopPrank();
+
+        vm.startPrank(user);
+        mockWETH.mint(user, initialBalanceUSDC);
+        IERC20(Currency.unwrap(usdc)).approve(
+            address(balanceManager),
+            initialBalanceUSDC
+        );
+        // balanceManager.deposit(usdc, initialBalanceUSDC);
+        OrderId orderId = router.placeMarketOrderWithDeposit(
+            key,
+            price,
+            Quantity.wrap(Quantity.unwrap(quantity) / 2),
+            Side.BUY
+        );
+
+        (uint48 orderCount, uint256 totalVolume) = router.getOrderQueue(
+            key,
+            Side.SELL,
+            price
+        );
+        console.log("Order Count:", orderCount);
+        console.log("Total Volume:", totalVolume);
+        console.log("Market order placed with ID:", OrderId.unwrap(orderId));
+
+        assertEq(orderCount, 0);
+        assertEq(totalVolume, 0);
+
+        uint256 balance = balanceManager.getBalance(user, usdc);
+        uint256 lockedBalance = balanceManager.getLockedBalance(
+            user,
+            address(poolManager.getPool(key).orderBook),
+            usdc
+        );
+
+        console.log("User Balance:", balance);
+        console.log("User Locked Balance:", lockedBalance);
+        vm.stopPrank();
+    }
+
+    function testCancelOrder() public {
+        PoolKey memory key = PoolKey(
+            address(Currency.unwrap(weth)),
+            address(Currency.unwrap(usdc))
+        );
+        Price price = Price.wrap(3000 * 10 ** 8);
+        Quantity quantity = Quantity.wrap(10 * 10 ** 18);
+        uint256 amount = 3000 * 10 * 10 ** 6;
+        Side side = Side.BUY;
+
+        // Place an order first
+        vm.startPrank(user);
+        IERC20(Currency.unwrap(usdc)).approve(address(balanceManager), amount);
+        balanceManager.deposit(usdc, amount);
+        OrderId orderId = router.placeOrder(key, price, quantity, side);
+        router.cancelOrder(key, side, price, orderId);
+        vm.stopPrank();
+
+        (uint48 orderCount, uint256 totalVolume) = router.getOrderQueue(
+            key,
+            side,
+            price
+        );
+        console.log("Order Count:", orderCount);
+        console.log("Total Volume:", totalVolume);
+
+        assertEq(orderCount, 0);
+        assertEq(totalVolume, 0);
+
+        // Check the balance and locked balance from the balance manager
+        uint256 balance = balanceManager.getBalance(user, weth);
+        uint256 lockedBalance = balanceManager.getLockedBalance(
+            user,
+            address(poolManager.getPool(key).orderBook),
+            weth
+        );
+
+        console.log("User Balance:", balance);
+        console.log("User Locked Balance:", lockedBalance);
+        vm.stopPrank();
+    }
 }

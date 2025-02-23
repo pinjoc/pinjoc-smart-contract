@@ -8,14 +8,12 @@ interface IERC20Symbol {
     function symbol() external view returns (string memory);
 }
 
-contract POCToken is ERC20 {
+contract OrderBookToken is ERC20 {
     // error
     error InvalidMonth();
 
     // parameters
-    address public debtToken;
-    address public collateralToken;
-    uint256 public rate;
+    address public token;
     uint256 public maturityMonth;
     uint256 public maturityYear;
 
@@ -25,18 +23,14 @@ contract POCToken is ERC20 {
     mapping(uint256 => string) public numberToMonthShort;
 
     constructor(
-        address _debtToken,
-        address _collateralToken,
-        uint256 _rate,
+        address _token,
         string memory _month,
         uint256 _year
     ) ERC20(
-        generateTokenName(_debtToken, _collateralToken, _rate, _month, _year),
-        generateTokenSymbol(_debtToken, _collateralToken, _rate, _month, _year)
+        generateTokenName(_token),
+        generateTokenSymbol(_token, _month, _year)
     ) {
-        debtToken = _debtToken;
-        collateralToken = _collateralToken;
-        rate = _rate;
+        token = _token;
 
         // initialize month mapping
         monthToNumber["JAN"] = 1;
@@ -85,56 +79,35 @@ contract POCToken is ERC20 {
     }
 
     function generateTokenName(
-        address _debtToken,
-        address _collateralToken,
-        uint256 _rate,
+        address _token
+    ) internal view returns (string memory) {
+        string memory symbol = getTokenPair(_token);
+        return string(
+            abi.encodePacked(
+                "CA ",
+                symbol
+            )
+        );
+    }
+
+    function generateTokenSymbol(
+        address _token,
         string memory _month,
         uint256 _year
     ) internal view returns (string memory) {
-        string memory pair = getTokenPair(_debtToken, _collateralToken);
+        string memory symbol = getTokenPair(_token);
         return string(
             abi.encodePacked(
-                "POC ",
-                pair,
-                " ",
-                uint2str(_rate),
-                "% ",
+                symbol,
                 _month,
-                "-",
                 uint2str(_year)
             )
         );
     }
 
-    function getTokenPair(address _debtToken, address _collateralToken) internal view returns (string memory) {
-        string memory debtSymbol = IERC20Symbol(_debtToken).symbol();
-        string memory collateralSymbol = IERC20Symbol(_collateralToken).symbol();
-        return string(abi.encodePacked(debtSymbol,"-",collateralSymbol));
-    }
-
-    function generateTokenSymbol(
-        address _debtToken,
-        address _collateralToken,
-        uint256 _rate,
-        string memory _month,
-        uint256 _year
-    ) internal view returns (string memory) {
-        string memory pairSymbol = getTokenPairSymbol(_debtToken, _collateralToken);
-        return string(
-            abi.encodePacked(
-                "poc",
-                pairSymbol,
-                uint2str(_rate),
-                _month,
-                uint2str(_year % 100)
-            )
-        );
-    }
-
-    function getTokenPairSymbol(address _debtToken, address _collateralToken) internal view returns (string memory) {
-        string memory debtSymbol = IERC20Symbol(_debtToken).symbol();
-        string memory collateralSymbol = IERC20Symbol(_collateralToken).symbol();
-        return string(abi.encodePacked(debtSymbol, collateralSymbol));
+    function getTokenPair(address _token) internal view returns (string memory) {
+        string memory tokenSymbol = IERC20Symbol(_token).symbol();
+        return string(abi.encodePacked(tokenSymbol));
     }
 
     function uint2str(uint256 _i) internal pure returns (string memory) {
