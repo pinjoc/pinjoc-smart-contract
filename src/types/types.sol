@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.26;
 
 type OrderId is uint48;
-type Price is uint64;
 type Quantity is uint128;
-type Currency is address;
 type PoolId is bytes32;
 
 enum Side {

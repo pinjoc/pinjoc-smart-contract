@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
-import {OrderId, Quantity, Side, Status, Price, PoolKey, Currency} from "../types/Types.sol";
+import {OrderId, Quantity, Side, Status, PoolKey} from "../types/Types.sol";
+import {Currency} from "../types/currency.sol";
+import {Price} from "../libraries/BokkyPooBahsRedBlackTreeLibrary.sol";
 
 interface IOrderBook {
     struct Order {

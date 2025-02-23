@@ -1,12 +1,14 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.26;
 
 import {Test, console} from "forge-std/Test.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IGTXRouter} from "../src/interfaces/IGTXRouter.sol";
 import {IPoolManager} from "../src/interfaces/IPoolManager.sol";
 import {IBalanceManager} from "../src/interfaces/IBalanceManager.sol";
-import {PoolKey, Price, Quantity, Side, OrderId, Currency} from "../src/types/types.sol";
+import {PoolKey, Quantity, Side, OrderId} from "../src/types/types.sol";
+import {Price} from "../src/libraries/BokkyPooBahsRedBlackTreeLibrary.sol";
+import {Currency} from "../src/types/currency.sol";
 import {MockUSDC} from "../src/mocks/MockUSDC.sol";
 import {MockWETH} from "../src/mocks/MockWETH.sol";
 
