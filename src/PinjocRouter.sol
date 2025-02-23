@@ -7,6 +7,7 @@ import {LendingOrderType} from "./types/Types.sol";
 import {IPoolManager, PoolKey} from "./interfaces/IPoolManager.sol";
 import {IOrderBook} from "./interfaces/IOrderBook.sol";
 import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {OrderBookToken} from "./OrderBookToken.sol";
 
 contract PinjocRouter is Ownable, ReentrancyGuard {
 
@@ -31,7 +32,7 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
     function getOrderBookTokenAddress(address _token, string calldata _maturityMonth, uint16 _maturityYear) internal view returns (address) {
         string memory _tokenName = string(abi.encodePacked(IERC20Metadata(_token).symbol(), _maturityMonth, _maturityYear));
         if (orderBookTokenMapping[_tokenName] == address(0)) {
-            // orderBookTokenMapping[_tokenName] = new OrderBookToken(_token, _maturityMonth, _maturityYear); // TODO-WILL: UNFINISHED, WAIT TILL ARDI'S COMMIT
+            orderBookTokenMapping[_tokenName] = new OrderBookToken(_token, _maturityMonth, _maturityYear); // TODO-WILL: UNFINISHED, WAIT TILL ARDI'S COMMIT
         }
         return address(orderBookTokenMapping[_tokenName]);
     }
@@ -76,7 +77,7 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
             _maturity == 0
         ) revert InvalidPlaceOrderParameter();
 
-        Pool memory pool = getExistingPool(_debtToken, _collateralToken, _maturityMonth, _maturityYear);
+        IPoolManager.Pool memory pool = getExistingPool(_debtToken, _collateralToken, _maturityMonth, _maturityYear);
 
 
 
@@ -88,12 +89,8 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
         // if the order position type is the same as the current order type, then add the order to the order position
     }
 
-    function _limitOrder() internal nonReentrant {
-        // add order to the order position based on the queue order position
-    }
-
     function _matchOrder() internal nonReentrant {
-        // deduct order position based on the queue order position
+        // create lending pool
     }
 
     function cancelOrder() external nonReentrant {
