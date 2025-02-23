@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import {ETHUSDOracle} from "./ETHUSDOracle.sol";
 
 // References using morpho: https://github.com/morpho-org/morpho-blue/blob/main/src/Morpho.sol
 // Accrue Interest = Utilization Rate * APY Supply
@@ -14,7 +12,7 @@ interface IOracle {
     function getPrice() external view returns (uint256);
 }
 
-contract LendingPool is Ownable, ReentrancyGuard {
+contract LendingPool is ReentrancyGuard {
 
     // Errors
     error InvalidAddressParameter();
@@ -33,6 +31,7 @@ contract LendingPool is Ownable, ReentrancyGuard {
     event SupplyCollateral(address user, uint256 amount);
     event WithdrawCollateral(address user, uint256 amount);
     event Repay(address user, uint256 amount, uint256 shares);
+    event FlashLoan(address user, address token, uint256 amount);
 
     address public debtToken; // USDC
     address public collateralToken; // ETH
