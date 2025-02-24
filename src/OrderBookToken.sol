@@ -1,25 +1,32 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {ERC20} from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 import {Uint256Library} from "./types/Types.sol";
 
 using Uint256Library for uint256;
 using Strings for address;
 
-contract OrderBookToken is ERC20 {
+contract OrderBookToken is ERC20, Ownable {
+
+    address public pinjocRouter;
 
     constructor(
         address _token,
         string memory _maturityMonth,
-        uint256 _maturityYear
-    ) ERC20(
+        uint256 _maturityYear,
+        address _pinjocRouter
+    )
+    ERC20(
         _token.toHexString(),
         generateTokenSymbol(_token, _maturityMonth, _maturityYear)
-    ) {
-    }
+    ) 
+    Ownable(_pinjocRouter) 
+    {}
 
     function generateTokenSymbol(
         address _token,
@@ -39,7 +46,7 @@ contract OrderBookToken is ERC20 {
         return 18;
     }
     
-    function mint(address to, uint256 amount) public {
+    function mint(address to, uint256 amount) public onlyOwner {
         _mint(to, amount);
     }
 }
