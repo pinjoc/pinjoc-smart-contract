@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.13;
 
-import {DynamicOracle} from "./Oracle.sol";
+import {Oracle} from "./Oracle.sol";
 
-contract DynamicOracleFactory {
+contract OracleFactory {
     // Error
     error ZeroAddress();
 
@@ -12,7 +12,7 @@ contract DynamicOracleFactory {
         if (_baseFeed == address(0) || _quoteFeed == address(0)) revert ZeroAddress();
         
         // Create new oracle
-        DynamicOracle oracle = new DynamicOracle(_baseFeed, _quoteFeed);
+        Oracle oracle = new Oracle(_baseFeed, _quoteFeed);
         
         return address(oracle);
     }

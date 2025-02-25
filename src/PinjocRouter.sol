@@ -10,26 +10,29 @@ import {IMockGTXOrderBook} from "./interfaces/IMockGTXOrderBook.sol";
 import {LendingOrderType, Status} from "./types/Types.sol";
 import {OrderBookToken} from "./OrderBookToken.sol";
 import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
+import {ILendingPool} from "./interfaces/ILendingPool.sol";
 
 contract PinjocRouter is Ownable, ReentrancyGuard {
 
     IMockGTXOrderBook public orderBook;
-    mapping(string => address) public orderBookTokenMapping;
     ILendingPoolManager public lendingPoolManager;
+    mapping(string => address) public orderBookTokenMapping;
 
     error InvalidAddressParameter();
     error InvalidPlaceOrderParameter();
     error BalanceNotEnough(address token, uint256 balance, uint256 amount);
+    error LendingPoolNotFound();
+    error DelegateCallFailed();
 
     event OrderPlaced(
         uint256 orderId,
         address debtToken,
         address collateralToken,
         uint256 amount,
-        uint64 rate,
+        uint256 rate,
         uint256 maturity,
         string maturityMonth,
-        uint16 maturityYear,
+        uint256 maturityYear,
         LendingOrderType lendingOrderType,
         Status status
     );
@@ -57,10 +60,10 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
         lendingPoolManager = ILendingPoolManager(_lendingPoolManager);
     }
 
-    function getOrderBookTokenAddress(address _token, string calldata _maturityMonth, uint16 _maturityYear) internal returns (address) {
+    function getOrderBookTokenAddress(address _token, string calldata _maturityMonth, uint256 _maturityYear) internal returns (address) {
         string memory _tokenName = string(abi.encodePacked(IERC20Metadata(_token).symbol(), _maturityMonth, _maturityYear));
         if (orderBookTokenMapping[_tokenName] == address(0)) {  
-            OrderBookToken _newToken = new OrderBookToken(_token, _maturityMonth, _maturityYear, address(this));
+            OrderBookToken _newToken = new OrderBookToken(_token, _maturityMonth, _maturityYear);
             orderBookTokenMapping[_tokenName] = address(_newToken);
         }
         return orderBookTokenMapping[_tokenName];
@@ -69,11 +72,11 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
     function placeOrder(
         address _debtToken, // lender's token - CA USDC
         address _collateralToken, // borrower's token - CA ETH
-        uint256 _amount, // amount of token whether debt token or collateral token - 500K$
-        uint64 _rate, // APY percentage (18 decimals), e.g. for 100% pass 1e18 or 100e16, for 5% pass 5e16 - 4%
+        uint256 _amount, // amount of token debt token not collateral token - 500K$
+        uint256 _rate, // APY percentage (18 decimals), e.g. for 100% pass 1e18 or 100e16, for 5% pass 5e16 - 4%
         uint256 _maturity, // maturity date in unix timestamp - 31 Maret 2025
         string calldata _maturityMonth, // MAR
-        uint16 _maturityYear, // 2025
+        uint256 _maturityYear, // 2025
         LendingOrderType _lendingOrderType, // LEND
         bool _isMatchOrder
     ) external nonReentrant {
@@ -81,17 +84,8 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
             _debtToken == address(0) ||
             _collateralToken == address(0) ||
             _amount == 0 ||
-            _rate == 0 ||
-            _maturity == 0
+            _rate == 0
         ) revert InvalidPlaceOrderParameter();
-
-        if (_isMatchOrder) {
-            if (_lendingOrderType == LendingOrderType.LEND && IERC20(_debtToken).balanceOf(msg.sender) < _amount) {
-                revert BalanceNotEnough(_debtToken, IERC20(_debtToken).balanceOf(msg.sender), _amount);
-            } else if (_lendingOrderType == LendingOrderType.BORROW && IERC20(_collateralToken).balanceOf(msg.sender) < _amount) {
-                revert BalanceNotEnough(_collateralToken, IERC20(_collateralToken).balanceOf(msg.sender), _amount);
-            }
-        }
 
         address debtTokenOrderBookAddress = getOrderBookTokenAddress(_debtToken, _maturityMonth, _maturityYear);
         address collateralTokenOrderBookAddress = getOrderBookTokenAddress(_collateralToken, _maturityMonth, _maturityYear);
@@ -120,15 +114,44 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
         );
         
         if (_isMatchOrder) {
-            _matchOrder();
-        }
-    }
+            address lendingPoolAddress = lendingPoolManager.getLendingPool(
+                _debtToken,
+                _collateralToken,
+                _rate,
+                _maturityMonth,
+                _maturityYear
+            );
+            if (lendingPoolAddress == address(0)) revert LendingPoolNotFound();
 
-    function _matchOrder() internal nonReentrant {
-        // check if there is existing lending pool
-        // if it does not exist, then create the lending pool
-        // if it does exist, then check the order position type
-        
+            // Build the data for the delegatecall
+            bytes memory data;
+            if (_lendingOrderType == LendingOrderType.LEND) {
+                // supply(uint256)
+                data = abi.encodeWithSelector(
+                    ILendingPool.supply.selector,
+                    _amount
+                );
+            } else if (_lendingOrderType == LendingOrderType.BORROW) {
+                // borrow(uint256)
+                data = abi.encodeWithSelector(
+                    ILendingPool.borrow.selector,
+                    _amount
+                );
+            }
+
+            // Perform the delegatecall
+            (bool success, bytes memory returnData) = lendingPoolAddress.delegatecall(data);
+            if (!success) {
+                // Bubble up the revert reason from the called contract
+                if (returnData.length > 0) {
+                    assembly {
+                        revert(add(returnData, 32), mload(returnData))
+                    }
+                } else {
+                    revert DelegateCallFailed();
+                }
+            }
+        }
     }
 
     function cancelOrder(

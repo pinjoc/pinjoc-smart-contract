@@ -4,11 +4,12 @@ pragma solidity ^0.8.13;
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {ERC20} from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+
 import {Uint256Library} from "./types/Types.sol";
 
 using Uint256Library for uint256;
 
-contract POCToken is ERC20, Ownable {
+contract PinjocToken is ERC20, Ownable {
     constructor(
         address _debtToken,
         address _collateralToken,
@@ -19,9 +20,7 @@ contract POCToken is ERC20, Ownable {
     ) ERC20(
         generateTokenName(_debtToken, _collateralToken, _rate, _maturityMonth, _maturityYear),
         generateTokenSymbol(_debtToken, _collateralToken, _rate, _maturityMonth, _maturityYear)
-    )
-    Ownable(_lendingPool)
-    {}
+    ) Ownable(_lendingPool) {}
 
     function generateTokenName(
         address _debtToken,
@@ -30,27 +29,18 @@ contract POCToken is ERC20, Ownable {
         string memory _maturityMonth,
         uint256 _maturityYear
     ) internal view returns (string memory) {
-        string memory pair = getTokenPair(_debtToken, _collateralToken);
         return string(
             abi.encodePacked(
                 "POC ",
-                pair,
+                IERC20Metadata(_debtToken).symbol(), 
+                "-", 
+                IERC20Metadata(_collateralToken).symbol(),
                 " ",
                 _rate.toString(),
                 "% ",
                 _maturityMonth,
                 "-",
                 _maturityYear.toString()
-            )
-        );
-    }
-
-    function getTokenPair(address _debtToken, address _collateralToken) internal view returns (string memory) {
-        return string(
-            abi.encodePacked(
-                IERC20Metadata(_debtToken).symbol(), 
-                "-", 
-                IERC20Metadata(_collateralToken).symbol()
             )
         );
     }
@@ -62,23 +52,14 @@ contract POCToken is ERC20, Ownable {
         string memory _maturityMonth,
         uint256 _maturityYear
     ) internal view returns (string memory) {
-        string memory pairSymbol = getTokenPairSymbol(_debtToken, _collateralToken);
         return string(
             abi.encodePacked(
                 "poc",
-                pairSymbol,
+                IERC20Metadata(_debtToken).symbol(),
+                IERC20Metadata(_collateralToken).symbol(),
                 _rate.toString(),
                 _maturityMonth,
                 _maturityYear.toString()
-            )
-        );
-    }
-
-    function getTokenPairSymbol(address _debtToken, address _collateralToken) internal view returns (string memory) {
-        return string(
-            abi.encodePacked(
-                IERC20Metadata(_debtToken).symbol(),
-                IERC20Metadata(_collateralToken).symbol()
             )
         );
     }
@@ -87,7 +68,11 @@ contract POCToken is ERC20, Ownable {
         return 18;
     }
     
-    function mint(address to, uint256 amount) public {
+    function mint(address to, uint256 amount) external onlyOwner {
         _mint(to, amount);
+    }
+
+    function burn(address from, uint256 amount) external onlyOwner {
+        _burn(from, amount);
     }
 }

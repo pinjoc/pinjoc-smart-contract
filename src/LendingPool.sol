@@ -5,17 +5,13 @@ import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/Reentrancy
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-// References using morpho: https://github.com/morpho-org/morpho-blue/blob/main/src/Morpho.sol
-// Accrue Interest = Utilization Rate * APY Supply
-
-interface IOracle {
-    function getPrice() external view returns (uint256);
-}
+import {PinjocToken} from "./PinjocToken.sol";
+import {IMockOracle} from "./interfaces/IMockOracle.sol";
 
 contract LendingPool is ReentrancyGuard {
 
     // Errors
-    error InvalidAddressParameter();
+    error InvalidConstructorParameter();
     error ZeroAmount();
     error InsufficientLiquidity();
     error InsufficientShares();
@@ -36,11 +32,13 @@ contract LendingPool is ReentrancyGuard {
     address public debtToken; // USDC
     address public collateralToken; // ETH
     address public oracle; // USDC-ETH Oracle
+    address public pinjocToken;
+    uint256 public borrowRate; // 18 decimals: 1e17 = 10% APY
+    uint256 public maturity; // 1 year
 
     // Supply
     uint256 public totalSupplyAssets;
     uint256 public totalSupplyShares;
-    mapping(address => uint256) public userSupplyShares;
 
     // Borrow
     uint256 public totalBorrowAssets;
@@ -50,24 +48,40 @@ contract LendingPool is ReentrancyGuard {
 
     // Interest Calculation
     uint256 public lastAccrued = block.timestamp; // assumpt this contract is deployed after anyone doing supply
-    uint256 public borrowRate; // 18 decimals: 1e17 = 10% APY
 
     // Collateral Calculation
     uint256 public ltv; // 70% Loan to Value (70% in 18 decimals)
 
-    constructor(address _debtToken, address _collateralToken, address _oracle, uint256 _ltv, uint256 _borrowRate) {
-        if (_debtToken == address(0) || _collateralToken == address(0) || _oracle == address(0)) revert InvalidAddressParameter();
-        if (_ltv > 1e18) revert LTVExceedAmount();
-        if (_borrowRate > 1e18) revert BorrowRateExceedAmount();
+    constructor(
+        address _debtToken,
+        address _collateralToken,
+        address _oracle,
+        uint256 _borrowRate,
+        uint256 _ltv,
+        uint256 _maturity,
+        string memory _maturityMonth,
+        uint256 _maturityYear
+    ) {
+        if (
+            _debtToken == address(0) ||
+            _collateralToken == address(0) ||
+            _oracle == address(0) ||
+            _borrowRate > 100e16 ||
+            _maturity <= block.timestamp ||
+            _ltv > 100e16
+        ) revert InvalidConstructorParameter();
 
         debtToken = _debtToken;
         collateralToken = _collateralToken;
         oracle = _oracle;
-        ltv = _ltv;
         borrowRate = _borrowRate;
+        maturity = _maturity;
+        ltv = _ltv;
+
+        pinjocToken = address(new PinjocToken(_debtToken, _collateralToken, _borrowRate, _maturityMonth, _maturityYear, address(this)));
     }
 
-    function supply(uint256 amount) public nonReentrant {
+    function supply(uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
         if (IERC20(debtToken).balanceOf(msg.sender) < amount) revert InsufficientLiquidity();
         _accrueInterest();
@@ -78,11 +92,11 @@ contract LendingPool is ReentrancyGuard {
         } else {
             shares = (amount * totalSupplyShares) / totalSupplyAssets;
         }
-
-        userSupplyShares[msg.sender] += shares;
+        
         totalSupplyShares += shares;
         totalSupplyAssets += amount;
-
+        
+        PinjocToken(pinjocToken).mint(msg.sender, shares);
         IERC20(debtToken).transferFrom(msg.sender, address(this), amount);
 
         emit Supply(msg.sender, amount, shares);
@@ -113,18 +127,18 @@ contract LendingPool is ReentrancyGuard {
 
     function withdraw(uint256 shares) external nonReentrant {
         if (shares == 0) revert ZeroAmount();
-        if (userSupplyShares[msg.sender] < shares) revert InsufficientShares();
+        if (IERC20(pinjocToken).balanceOf(msg.sender) < shares) revert InsufficientShares();
         _accrueInterest();
 
         // this calculates automatically with the interest
         uint256 amount = (shares * totalSupplyAssets) / totalSupplyShares;
 
         if (IERC20(debtToken).balanceOf(address(this)) < amount) revert InsufficientLiquidity();
-
-        userSupplyShares[msg.sender] -= shares;
+        
         totalSupplyShares -= shares;
         totalSupplyAssets -= amount;
 
+        PinjocToken(pinjocToken).burn(msg.sender, shares);
         IERC20(debtToken).transfer(msg.sender, amount);
         
         emit Withdraw(msg.sender, amount, shares);
@@ -201,7 +215,7 @@ contract LendingPool is ReentrancyGuard {
     }
 
     function _isHealthy(address user) internal view {
-        uint256 collateralPrice = IOracle(oracle).getPrice();
+        uint256 collateralPrice = IMockOracle(oracle).price();
         uint256 collateralDecimals = 10 ** IERC20Metadata(collateralToken).decimals();
 
         uint256 borrowedValue = userBorrowShares[user] * totalBorrowAssets / totalBorrowShares;

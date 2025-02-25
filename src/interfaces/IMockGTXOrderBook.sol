@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.13;
 
 import {Status, Side} from "../types/Types.sol";
 
@@ -46,6 +46,6 @@ interface IMockGTXOrderBook {
         Side side,
         bool isMatch
     ) external returns (uint256, Status);
-    function getActiveOrders(address trader) external view returns (Order[] memory);
+    function getUserOrders(address trader) external view returns (Order[] memory);
     function cancelOrder(address trader, uint256 orderId) external;
 }

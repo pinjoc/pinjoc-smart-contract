@@ -36,7 +36,7 @@ contract MockGTXOrderBook is IMockGTXOrderBook {
         return (orderId, newOrder.status);
     }
 
-    function getActiveOrders(address trader) external view returns (Order[] memory) {
+    function getUserOrders(address trader) external view returns (Order[] memory) {
         return traderOrders[trader];
     }
 
