@@ -15,9 +15,14 @@ contract MockOracle is Ownable {
         baseFeed = _baseFeed;
         quoteFeed = _quoteFeed;
     }
-    
+
     function setPrice(uint256 _price) external {
         if (_price == 0) revert InvalidPrice();
         price = _price;
+    }
+
+    // only for checking deploy script
+    function getPrice() external view returns (uint256) {
+        return price;
     }
 }
