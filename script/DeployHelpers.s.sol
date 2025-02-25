@@ -17,7 +17,10 @@ contract DeployHelpers is Script {
     string path;
     Deployment[] public deployments;
 
-    function setupLocalhostEnv() internal returns (uint256 localhostPrivateKey) {
+    function setupLocalhostEnv()
+        internal
+        returns (uint256 localhostPrivateKey)
+    {
         if (block.chainid == 31_337) {
             root = vm.projectRoot();
             path = string.concat(root, "/localhost.json");
@@ -43,6 +46,7 @@ contract DeployHelpers is Script {
         // fetch already existing contracts
         root = vm.projectRoot();
         path = string.concat(root, "/deployments/");
+        vm.createDir(path, true);
         string memory chainIdStr = vm.toString(block.chainid);
         path = string.concat(path, string.concat(chainIdStr, ".json"));
 
@@ -51,8 +55,16 @@ contract DeployHelpers is Script {
         uint256 len = deployments.length;
 
         for (uint256 i = 0; i < len; i++) {
-            console.log("test---", vm.toString(deployments[i].addr), deployments[i].name);
-            vm.serializeString(jsonWrite, vm.toString(deployments[i].addr), deployments[i].name);
+            console.log(
+                "test---",
+                vm.toString(deployments[i].addr),
+                deployments[i].name
+            );
+            vm.serializeString(
+                jsonWrite,
+                vm.toString(deployments[i].addr),
+                deployments[i].name
+            );
         }
 
         string memory chainName;
