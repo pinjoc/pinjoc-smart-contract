@@ -124,33 +124,13 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
             );
             if (lendingPoolAddress == address(0)) revert LendingPoolNotFound();
 
-            // Build the data for the delegatecall
-            bytes memory data;
             if (_lendingOrderType == LendingOrderType.LEND) {
-                // supply(uint256)
-                data = abi.encodeWithSelector(
-                    ILendingPool.supply.selector,
-                    _amount
-                );
-            } else if (_lendingOrderType == LendingOrderType.BORROW) {
-                // borrow(uint256)
-                data = abi.encodeWithSelector(
-                    ILendingPool.borrow.selector,
-                    _amount
-                );
-            }
+                require(IERC20(_debtToken).transferFrom(msg.sender, address(this), _amount), "Transfer failed");
+                IERC20(_debtToken).approve(lendingPoolAddress, _amount);
+                ILendingPool(lendingPoolAddress).supply(msg.sender, _amount);
 
-            // Perform the delegatecall
-            (bool success, bytes memory returnData) = lendingPoolAddress.delegatecall(data);
-            if (!success) {
-                // Bubble up the revert reason from the called contract
-                if (returnData.length > 0) {
-                    assembly {
-                        revert(add(returnData, 32), mload(returnData))
-                    }
-                } else {
-                    revert DelegateCallFailed();
-                }
+            } else if (_lendingOrderType == LendingOrderType.BORROW) {
+                ILendingPool(lendingPoolAddress).borrow(msg.sender, _amount);
             }
         }
     }

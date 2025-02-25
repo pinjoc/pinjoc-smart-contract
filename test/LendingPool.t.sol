@@ -52,7 +52,7 @@ contract LendingPoolBaseTest is Test {
     function setUp_DebtSupply() public {
         vm.startPrank(lender);
         IERC20(usdc).approve(address(lendingPool), lenderDefaultBalance);
-        lendingPool.supply(lenderDefaultBalance);
+        lendingPool.supply(lender, lenderDefaultBalance);
         vm.stopPrank();
     }
 
@@ -65,12 +65,10 @@ contract LendingPoolBaseTest is Test {
 
     function setUp_Borrow() public {
         vm.startPrank(borrower);
-        lendingPool.borrow(1000e6);
+        lendingPool.borrow(borrower, 1000e6);
         vm.stopPrank();
     }
 }
-
-// WILLGD-TODO: TAMBAHKAN SUPPLY TEST
 
 contract LendingPoolScenarioTest is LendingPoolBaseTest {
     
@@ -86,6 +84,30 @@ contract LendingPoolScenarioTest is LendingPoolBaseTest {
 
         assertEq(lendingPool.totalBorrowAssets(), 1000e6 + 50e6);
         assertEq(lendingPool.totalSupplyAssets(), 1000e6 + 50e6);
+    }
+}
+
+contract LendingPoolSupplyTest is LendingPoolBaseTest {
+    
+    function test_Supply() public {
+        setUp_DebtSupply();
+
+        assertEq(IERC20(usdc).balanceOf(lender), 0);
+        assertEq(IERC20(lendingPool.pinjocToken()).balanceOf(lender), 1000e6);
+    }
+
+    function test_Supply_RevertIf_ZeroAmount() public {
+        vm.startPrank(lender);
+        vm.expectRevert(LendingPool.ZeroAmount.selector);
+        lendingPool.supply(lender, 0);
+        vm.stopPrank();
+    }
+
+    function test_Supply_RevertIf_InsufficientLiquidity() public {
+        vm.startPrank(lender);
+        vm.expectRevert(LendingPool.InsufficientLiquidity.selector);
+        lendingPool.supply(lender, 1100e6);
+        vm.stopPrank();
     }
 }
 
@@ -105,7 +127,7 @@ contract LendingPoolBorrowTest is LendingPoolBaseTest {
 
         vm.startPrank(borrower);
         vm.expectRevert(LendingPool.ZeroAmount.selector);
-        lendingPool.borrow(0);
+        lendingPool.borrow(borrower, 0);
         vm.stopPrank();
     }
 
@@ -115,7 +137,7 @@ contract LendingPoolBorrowTest is LendingPoolBaseTest {
 
         vm.startPrank(borrower);
         vm.expectRevert(LendingPool.InsufficientLiquidity.selector);
-        lendingPool.borrow(1100e6); // contract should only have 1000e6
+        lendingPool.borrow(borrower, 1100e6); // contract should only have 1000e6
         vm.stopPrank();
     }
 }
@@ -162,7 +184,7 @@ contract LendingPoolWithdrawTest is LendingPoolBaseTest {
         // borrower borrow 500 usdc
         setUp_CollateralSupply();
         vm.startPrank(borrower);
-        lendingPool.borrow(500e6);
+        lendingPool.borrow(borrower, 500e6);
         vm.stopPrank();
 
         vm.startPrank(lender);

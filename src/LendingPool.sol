@@ -7,8 +7,9 @@ import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/exten
 
 import {PinjocToken} from "./PinjocToken.sol";
 import {IMockOracle} from "./interfaces/IMockOracle.sol";
+import {ILendingPool} from "./interfaces/ILendingPool.sol";
 
-contract LendingPool is ReentrancyGuard {
+contract LendingPool is ReentrancyGuard, ILendingPool {
 
     // Errors
     error InvalidConstructorParameter();
@@ -81,9 +82,9 @@ contract LendingPool is ReentrancyGuard {
         pinjocToken = address(new PinjocToken(_debtToken, _collateralToken, _borrowRate, _maturityMonth, _maturityYear, address(this)));
     }
 
-    function supply(uint256 amount) external nonReentrant {
+    function supply(address user, uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
-        if (IERC20(debtToken).balanceOf(msg.sender) < amount) revert InsufficientLiquidity();
+        if (IERC20(debtToken).balanceOf(user) < amount) revert InsufficientLiquidity();
         _accrueInterest();
 
         uint256 shares = 0;
@@ -96,13 +97,13 @@ contract LendingPool is ReentrancyGuard {
         totalSupplyShares += shares;
         totalSupplyAssets += amount;
         
-        PinjocToken(pinjocToken).mint(msg.sender, shares);
+        PinjocToken(pinjocToken).mint(user, shares);
         IERC20(debtToken).transferFrom(msg.sender, address(this), amount);
 
-        emit Supply(msg.sender, amount, shares);
+        emit Supply(user, amount, shares);
     }
 
-    function borrow(uint256 amount) external nonReentrant {
+    function borrow(address user, uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
         if (IERC20(debtToken).balanceOf(address(this)) < amount) revert InsufficientLiquidity();
         _accrueInterest();
@@ -114,15 +115,15 @@ contract LendingPool is ReentrancyGuard {
             shares = (amount * totalBorrowShares) / totalBorrowAssets;
         }
 
-        userBorrowShares[msg.sender] += shares;
+        userBorrowShares[user] += shares;
         totalBorrowShares += shares;
         totalBorrowAssets += amount;
 
-        _isHealthy(msg.sender);
+        _isHealthy(user);
 
-        IERC20(debtToken).transfer(msg.sender, amount);
+        IERC20(debtToken).transfer(user, amount);
 
-        emit Borrow(msg.sender, amount, shares);
+        emit Borrow(user, amount, shares);
     }
 
     function withdraw(uint256 shares) external nonReentrant {
