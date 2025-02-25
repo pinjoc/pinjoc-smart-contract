@@ -14,18 +14,21 @@ contract OrderBookToken is ERC20 {
 
     constructor(
         address _token,
+        uint256 _rate,
         string memory _maturityMonth,
         uint256 _maturityYear
-    ) ERC20(_token.toHexString(), generateTokenSymbol(_token, _maturityMonth, _maturityYear)) {}
+    ) ERC20(_token.toHexString(), generateTokenSymbol(_token, _rate, _maturityMonth, _maturityYear)) {}
 
     function generateTokenSymbol(
         address _token,
+        uint256 _rate,
         string memory _maturityMonth,
         uint256 _maturityYear
     ) internal view returns (string memory) {
         return string(
             abi.encodePacked(
                 IERC20Metadata(_token).symbol(),
+                _rate.toString(),
                 _maturityMonth,
                 _maturityYear.toString()
             )

@@ -61,10 +61,10 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
         lendingPoolManager = ILendingPoolManager(_lendingPoolManager);
     }
 
-    function getOrderBookTokenAddress(address _token, string calldata _maturityMonth, uint256 _maturityYear) internal returns (address) {
+    function getOrderBookTokenAddress(address _token, uint256 _rate, string calldata _maturityMonth, uint256 _maturityYear) internal returns (address) {
         string memory _tokenName = string(abi.encodePacked(IERC20Metadata(_token).symbol(), _maturityMonth, _maturityYear));
         if (orderBookTokenMapping[_tokenName] == address(0)) {  
-            OrderBookToken _newToken = new OrderBookToken(_token, _maturityMonth, _maturityYear);
+            OrderBookToken _newToken = new OrderBookToken(_token, _rate, _maturityMonth, _maturityYear);
             orderBookTokenMapping[_tokenName] = address(_newToken);
         }
         return orderBookTokenMapping[_tokenName];
@@ -88,8 +88,8 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
             _rate == 0
         ) revert InvalidPlaceOrderParameter();
 
-        address debtTokenOB = getOrderBookTokenAddress(_debtToken, _maturityMonth, _maturityYear);
-        address collateralTokenOB = getOrderBookTokenAddress(_collateralToken, _maturityMonth, _maturityYear);
+        address debtTokenOB = getOrderBookTokenAddress(_debtToken, _rate, _maturityMonth, _maturityYear);
+        address collateralTokenOB = getOrderBookTokenAddress(_collateralToken, _rate, _maturityMonth, _maturityYear);
 
         (uint256 orderId, Status status) = orderBook.placeLimitOrder(
             debtTokenOB,

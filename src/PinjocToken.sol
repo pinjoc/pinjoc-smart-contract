@@ -41,7 +41,7 @@ contract PinjocToken is ERC20, Ownable {
                 _maturityMonth,
                 "-",
                 _maturityYear.toString()
-            )
+            ) // POC ETH-USDC 4% MAR-2025
         );
     }
 
@@ -60,7 +60,7 @@ contract PinjocToken is ERC20, Ownable {
                 _rate.toString(),
                 _maturityMonth,
                 _maturityYear.toString()
-            )
+            ) // pocETHUSDC4MAR2025
         );
     }
     
