@@ -48,8 +48,7 @@ contract LendingPoolManager is Ownable, ReentrancyGuard, ILendingPoolManager {
         uint256 _maturity,
         string calldata _maturityMonth,
         uint256 _maturityYear,
-        address _oracle,
-        address _pinjocToken
+        address _oracle
     ) public onlyOwner returns (address) {
         if (
             _debtToken == address(0) ||
@@ -58,20 +57,9 @@ contract LendingPoolManager is Ownable, ReentrancyGuard, ILendingPoolManager {
             _maturity == 0
         ) revert InvalidCreateLendingParameter();
         string memory key = _generateKey(_debtToken, _collateralToken, _rate, _maturityMonth, _maturityYear);
+        if (lendingPools[key] != address(0)) revert LendingPoolAlreadyExist();
 
-        emit LendingPoolCreated(
-            lendingPools[key],
-            _debtToken,
-            _collateralToken,
-            _rate,
-            _maturity,
-            _maturityMonth,
-            _maturityYear,
-            _oracle,
-            _pinjocToken
-        );
-        
-        return address(
+        lendingPools[key] = address(
             new LendingPool(
                 _debtToken,
                 _collateralToken,
@@ -83,6 +71,19 @@ contract LendingPoolManager is Ownable, ReentrancyGuard, ILendingPoolManager {
                 _maturityYear
             )
         );
+
+        emit LendingPoolCreated(
+            lendingPools[key],
+            _debtToken,
+            _collateralToken,
+            _rate,
+            _maturity,
+            _maturityMonth,
+            _maturityYear,
+            _oracle
+        );
+        
+        return lendingPools[key];
     }
 
     function getLendingPool(

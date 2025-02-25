@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 interface ILendingPoolManager {
 
     error Unauthorized(address user);
+    error LendingPoolAlreadyExist();
     error InvalidCreateLendingParameter();
 
     event LendingPoolCreated(
@@ -14,8 +15,7 @@ interface ILendingPoolManager {
         uint256 maturity,
         string maturityMonth,
         uint256 maturityYear,
-        address oracle,
-        address pinjocToken
+        address oracle
     );
 
     function getLendingPool(

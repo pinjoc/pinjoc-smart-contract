@@ -11,6 +11,7 @@ import {LendingOrderType, Status} from "./types/Types.sol";
 import {OrderBookToken} from "./OrderBookToken.sol";
 import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
 import {ILendingPool} from "./interfaces/ILendingPool.sol";
+import {Side} from "./types/Types.sol";
 
 contract PinjocRouter is Ownable, ReentrancyGuard {
 
@@ -87,12 +88,12 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
             _rate == 0
         ) revert InvalidPlaceOrderParameter();
 
-        address debtTokenOrderBookAddress = getOrderBookTokenAddress(_debtToken, _maturityMonth, _maturityYear);
-        address collateralTokenOrderBookAddress = getOrderBookTokenAddress(_collateralToken, _maturityMonth, _maturityYear);
+        address debtTokenOB = getOrderBookTokenAddress(_debtToken, _maturityMonth, _maturityYear);
+        address collateralTokenOB = getOrderBookTokenAddress(_collateralToken, _maturityMonth, _maturityYear);
 
         (uint256 orderId, Status status) = orderBook.placeLimitOrder(
-            debtTokenOrderBookAddress,
-            collateralTokenOrderBookAddress,
+            debtTokenOB,
+            collateralTokenOB,
             msg.sender,
             _amount,
             _rate,

@@ -46,6 +46,8 @@ interface IMockGTXOrderBook {
         Side side,
         bool isMatch
     ) external returns (uint256, Status);
+
     function getUserOrders(address trader) external view returns (Order[] memory);
+
     function cancelOrder(address trader, uint256 orderId) external;
 }

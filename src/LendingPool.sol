@@ -33,7 +33,7 @@ contract LendingPool is ReentrancyGuard {
     address public collateralToken; // ETH
     address public oracle; // USDC-ETH Oracle
     address public pinjocToken;
-    uint256 public borrowRate; // 18 decimals: 1e17 = 10% APY
+    uint256 public borrowRate; // 18 decimals: 10e16 = 10% APY
     uint256 public maturity; // 1 year
 
     // Supply
