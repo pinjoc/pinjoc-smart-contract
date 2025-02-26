@@ -7,6 +7,8 @@ import {MockOracle} from "../src/mocks/MockOracle.sol";
 import {DeployHelpers} from "./DeployHelpers.s.sol";
 import {LendingPoolManager} from "../src/LendingPoolManager.sol";
 import {LendingPool} from "../src/LendingPool.sol";
+import {MockGTXOrderBook} from "../src/mocks/MockGTXOrderBook.sol";
+import {PinjocRouter} from "../src/PinjocRouter.sol";
 
 contract DeployMocks is DeployHelpers {
     function run() public {
@@ -144,6 +146,23 @@ contract DeployMocks is DeployHelpers {
                 supplyAmounts[i]
             );
         }
+
+        console.log(unicode"\n🏦 Deploying MockGTXOrderBook...");
+        MockGTXOrderBook mockGTXOrderBook = new MockGTXOrderBook();
+        console.log(
+            unicode"✅ MockGTXOrderBook deployed at: %s",
+            address(mockGTXOrderBook)
+        );
+
+        console.log(unicode"\n🏦 Deploying PinjocRouter...");
+        PinjocRouter pinjocRouter = new PinjocRouter(
+            address(mockGTXOrderBook),
+            address(lendingPoolManager)
+        );
+        console.log(
+            unicode"✅ PinjocRouter deployed at: %s",
+            address(pinjocRouter)
+        );
 
         console.log(unicode"\n🎉 DEPLOYMENT COMPLETED 🎉");
 
