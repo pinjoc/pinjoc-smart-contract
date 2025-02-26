@@ -14,14 +14,10 @@ contract DeployMocks is DeployHelpers {
         address owner = vm.addr(deployerKey);
         vm.startBroadcast(deployerKey);
 
-        console.log(unicode"\n🚀 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        console.log(unicode"🚀  DEPLOYMENT STARTED");
-        console.log(unicode"🚀 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        console.log(unicode"\n🚀 DEPLOYMENT STARTED 🚀");
 
         // Deploy Mock Tokens
-        console.log(unicode"🪙 ──────────────────────────────────────");
-        console.log(unicode"🪙  DEPLOYING MOCK TOKENS");
-        console.log(unicode"🪙 ──────────────────────────────────────");
+        console.log(unicode"🪙 Deploying Mock Tokens...");
 
         MockToken usdc = new MockToken("Mock USDC", "MUSDC", 6);
         console.log(unicode"✅ Mock USDC deployed at: %s", address(usdc));
@@ -43,34 +39,30 @@ contract DeployMocks is DeployHelpers {
         }
 
         // Mint Tokens to Owner
-        console.log(unicode"\n💰 ──────────────────────────────────────");
-        console.log(unicode"💰  MINT KE OWNER");
-        console.log(unicode"💰 ──────────────────────────────────────");
+        console.log(unicode"\n💰 Minting Tokens to Owner...");
 
-        usdc.mint(owner, 8_000_000e6);
-        console.log(unicode"✅ MINT KE OWNER MUSDC SEBESAR 8_000_000e6");
+        usdc.mint(owner, 10_000_000e6); // Mint lebih banyak USDC
+        console.log(unicode"✅ Minted 10_000_000 MUSDC");
 
         uint88[5] memory mintAmounts = [
-            8_000_000e18,
-            8_000_000e8,
-            8_000_000e18,
-            8_000_000e18,
-            8_000_000e18
+            10_000_000e18, // MWETH
+            10_000_000e8, // MWBTC (8 desimal)
+            10_000_000e18, // MSOL
+            10_000_000e18, // MLINK
+            10_000_000e18 // MAAVE
         ];
 
         for (uint256 i = 0; i < collaterals.length; i++) {
             collaterals[i].mint(owner, mintAmounts[i]);
             console.log(
-                unicode"✅ MINT KE OWNER %s SEBESAR %s",
+                unicode"✅ Minted %s: %s",
                 collaterals[i].symbol(),
                 mintAmounts[i]
             );
         }
 
         // Deploy Mock Oracles
-        console.log(unicode"\n📊 ──────────────────────────────────────");
-        console.log(unicode"📊  DEPLOYING MOCK ORACLES");
-        console.log(unicode"📊 ──────────────────────────────────────");
+        console.log(unicode"\n📊 Deploying Mock Oracles...");
 
         MockOracle[5] memory oracles;
         uint40[5] memory prices = [2500e6, 90000e6, 200e6, 15e6, 200e6];
@@ -94,9 +86,7 @@ contract DeployMocks is DeployHelpers {
         }
 
         // Deploy LendingPoolManager
-        console.log(unicode"\n🏦 ──────────────────────────────────────");
-        console.log(unicode"🏦  DEPLOYING LENDINGPOOL MANAGER");
-        console.log(unicode"🏦 ──────────────────────────────────────");
+        console.log(unicode"\n🏦 Deploying LendingPoolManager...");
 
         LendingPoolManager lendingPoolManager = new LendingPoolManager();
         lendingPoolManager.setLtv(90e16);
@@ -106,11 +96,17 @@ contract DeployMocks is DeployHelpers {
         );
 
         // Deploy Lending Pools
-        console.log(unicode"\n📌 ──────────────────────────────────────");
-        console.log(unicode"📌  DEPLOYING LENDING POOLS");
-        console.log(unicode"📌 ──────────────────────────────────────");
+        console.log(unicode"\n📌 Deploying Lending Pools...");
 
         LendingPool[5] memory lendingPools;
+
+        uint80[5] memory supplyAmounts = [
+            1_000_000e18, // MWETH
+            1_000_000e8, // MWBTC (8 desimal)
+            1_000_000e18, // MSOL
+            1_000_000e18, // MLINK
+            1_000_000e18 // MAAVE
+        ];
 
         for (uint256 i = 0; i < collaterals.length; i++) {
             lendingPools[i] = LendingPool(
@@ -129,11 +125,27 @@ contract DeployMocks is DeployHelpers {
                 months[i],
                 address(lendingPools[i])
             );
+
+            // Approve MUSDC untuk supply
+            usdc.approve(address(lendingPools[i]), 2_000_000e6); // Memberikan allowance yang lebih besar
+            lendingPools[i].supply(owner, 1_000_000e6);
+            console.log(
+                unicode"✅ SUPPLY MUSDC ke LendingPool %s sebesar 1_000_000e6",
+                months[i]
+            );
+
+            // Approve & Supply Collateral ke LendingPool
+            collaterals[i].approve(address(lendingPools[i]), supplyAmounts[i]); // Approve hanya collateral yang sesuai
+            lendingPools[i].supplyCollateral(supplyAmounts[i]);
+            console.log(
+                unicode"✅ SUPPLY_COLLATERAL %s ke LendingPool %s sebesar %s",
+                collaterals[i].symbol(),
+                months[i],
+                supplyAmounts[i]
+            );
         }
 
-        console.log(unicode"\n🎉 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        console.log(unicode"🎉  DEPLOYMENT COMPLETED");
-        console.log(unicode"🎉 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        console.log(unicode"\n🎉 DEPLOYMENT COMPLETED 🎉");
 
         vm.stopBroadcast();
         exportDeployments();
