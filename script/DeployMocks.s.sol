@@ -11,6 +11,100 @@ import {MockGTXOrderBook} from "../src/mocks/MockGTXOrderBook.sol";
 import {PinjocRouter} from "../src/PinjocRouter.sol";
 
 contract DeployMocks is DeployHelpers {
+    struct MonthRate {
+        string month;
+        uint64[2] rates;
+        uint256 year;
+    }
+
+    function saveDeployment(
+        string memory fileName,
+        address usdc,
+        MockToken[5] memory collaterals,
+        address lendingPoolManager,
+        address pinjocRouter,
+        address mockGTXOrderBook,
+        LendingPool[40] memory lendingPools,
+        MonthRate[4] memory monthRates
+    ) internal {
+        string memory json = "{\n";
+
+        // Simpan Mock USDC Address
+        json = string.concat(
+            json,
+            '  "MockUSDC": "',
+            vm.toString(usdc),
+            '",\n'
+        );
+
+        // Simpan Collateral Token Addresses
+        for (uint256 i = 0; i < collaterals.length; i++) {
+            json = string.concat(
+                json,
+                '  "',
+                collaterals[i].symbol(),
+                '": "',
+                vm.toString(address(collaterals[i])),
+                '",\n'
+            );
+        }
+
+        // Simpan LendingPoolManager & Router Addresses
+        json = string.concat(
+            json,
+            '  "LendingPoolManager": "',
+            vm.toString(lendingPoolManager),
+            '",\n'
+        );
+        json = string.concat(
+            json,
+            '  "MockGTXOrderBook": "',
+            vm.toString(mockGTXOrderBook),
+            '",\n'
+        );
+        json = string.concat(
+            json,
+            '  "PinjocRouter": "',
+            vm.toString(pinjocRouter),
+            '",\n'
+        );
+
+        // Simpan Semua Lending Pools
+        json = string.concat(json, '  "LendingPools": [\n');
+        for (uint256 i = 0; i < collaterals.length; i++) {
+            for (uint256 j = 0; j < monthRates.length; j++) {
+                for (uint256 k = 0; k < 2; k++) {
+                    uint256 poolIndex = (i * monthRates.length * 2) +
+                        (j * 2) +
+                        k;
+
+                    json = string.concat(
+                        json,
+                        "    {\n",
+                        '      "Collateral": "',
+                        collaterals[i].symbol(),
+                        '",\n',
+                        '      "Month": "',
+                        monthRates[j].month,
+                        '",\n',
+                        '      "Rate": "',
+                        vm.toString(monthRates[j].rates[k]),
+                        '",\n',
+                        '      "Address": "',
+                        vm.toString(address(lendingPools[poolIndex])),
+                        '"\n',
+                        "    },\n"
+                    );
+                }
+            }
+        }
+        // Hapus koma terakhir untuk JSON valid
+        json = string.concat(json, "  ]\n}");
+
+        // Simpan ke file JSON
+        vm.writeFile(fileName, json);
+    }
+
     function run() public {
         uint256 deployerKey = getDeployerKey();
         address owner = vm.addr(deployerKey);
@@ -20,9 +114,8 @@ contract DeployMocks is DeployHelpers {
 
         // Deploy Mock Tokens
         console.log(unicode"🪙 Deploying Mock Tokens...");
-
-        MockToken usdc = new MockToken("Mock USDC", "MUSDC", 6);
-        console.log(unicode"✅ Mock USDC deployed at: %s", address(usdc));
+        MockToken musdc = new MockToken("Mock USDC", "MUSDC", 6);
+        console.log(unicode"✅ Mock USDC deployed at: %s", address(musdc));
 
         MockToken[5] memory collaterals = [
             new MockToken("Mock WETH", "MWETH", 18),
@@ -40,18 +133,17 @@ contract DeployMocks is DeployHelpers {
             );
         }
 
-        // Mint Tokens to Owner
+        // Mint Tokens to Owner (Tambahkan Likuiditas Lebih Banyak)
         console.log(unicode"\n💰 Minting Tokens to Owner...");
-
-        usdc.mint(owner, 10_000_000e6); // Mint lebih banyak USDC
-        console.log(unicode"✅ Minted 10_000_000 MUSDC");
+        musdc.mint(owner, 1_000_000_000e6);
+        console.log(unicode"✅ Minted 1B MUSDC");
 
         uint88[5] memory mintAmounts = [
-            10_000_000e18, // MWETH
-            10_000_000e8, // MWBTC (8 desimal)
-            10_000_000e18, // MSOL
-            10_000_000e18, // MLINK
-            10_000_000e18 // MAAVE
+            50_000_000e18, // MWETH
+            50_000_000e8, // MWBTC
+            50_000_000e18, // MSOL
+            50_000_000e18, // MLINK
+            50_000_000e18 // MAAVE
         ];
 
         for (uint256 i = 0; i < collaterals.length; i++) {
@@ -65,31 +157,24 @@ contract DeployMocks is DeployHelpers {
 
         // Deploy Mock Oracles
         console.log(unicode"\n📊 Deploying Mock Oracles...");
-
         MockOracle[5] memory oracles;
         uint40[5] memory prices = [2500e6, 90000e6, 200e6, 15e6, 200e6];
-        string[5] memory months = [
-            "MAY",
-            "JUNE",
-            "JULY",
-            "AUGUST",
-            "SEPTEMBER"
-        ];
-        uint56[5] memory rates = [5e16, 6e16, 7e16, 4e16, 5e16];
 
         for (uint256 i = 0; i < collaterals.length; i++) {
-            oracles[i] = new MockOracle(address(collaterals[i]), address(usdc));
+            oracles[i] = new MockOracle(
+                address(collaterals[i]),
+                address(musdc)
+            );
             oracles[i].setPrice(prices[i]);
             console.log(
                 unicode"✅ MockOracle for %s deployed at: %s",
-                months[i],
+                collaterals[i].symbol(),
                 address(oracles[i])
             );
         }
 
         // Deploy LendingPoolManager
         console.log(unicode"\n🏦 Deploying LendingPoolManager...");
-
         LendingPoolManager lendingPoolManager = new LendingPoolManager();
         lendingPoolManager.setLtv(90e16);
         console.log(
@@ -99,52 +184,66 @@ contract DeployMocks is DeployHelpers {
 
         // Deploy Lending Pools
         console.log(unicode"\n📌 Deploying Lending Pools...");
+        LendingPool[40] memory lendingPools;
 
-        LendingPool[5] memory lendingPools;
-
-        uint80[5] memory supplyAmounts = [
-            1_000_000e18, // MWETH
-            1_000_000e8, // MWBTC (8 desimal)
-            1_000_000e18, // MSOL
-            1_000_000e18, // MLINK
-            1_000_000e18 // MAAVE
+        MonthRate[4] memory monthRates = [
+            MonthRate("MAY", [6e16, 8e16], 2025),
+            MonthRate("AUG", [10e16, 12e16], 2025),
+            MonthRate("NOV", [19e16, 21e16], 2025),
+            MonthRate("FEB", [22e16, 24e16], 2026)
         ];
 
         for (uint256 i = 0; i < collaterals.length; i++) {
-            lendingPools[i] = LendingPool(
-                lendingPoolManager.createLendingPool(
-                    address(usdc),
-                    address(collaterals[i]),
-                    rates[i],
-                    block.timestamp + ((i + 1) * 30 days),
-                    months[i],
-                    2025,
-                    address(oracles[i])
-                )
-            );
-            console.log(
-                unicode"✅ LendingPool USDC-%s deployed at: %s",
-                months[i],
-                address(lendingPools[i])
-            );
+            for (uint256 j = 0; j < monthRates.length; j++) {
+                for (uint256 k = 0; k < 2; k++) {
+                    uint256 poolIndex = (i * monthRates.length * 2) +
+                        (j * 2) +
+                        k;
 
-            // Approve MUSDC untuk supply
-            usdc.approve(address(lendingPools[i]), 2_000_000e6); // Memberikan allowance yang lebih besar
-            lendingPools[i].supply(owner, 1_000_000e6);
-            console.log(
-                unicode"✅ SUPPLY MUSDC ke LendingPool %s sebesar 1_000_000e6",
-                months[i]
-            );
+                    lendingPools[poolIndex] = LendingPool(
+                        lendingPoolManager.createLendingPool(
+                            address(musdc),
+                            address(collaterals[i]),
+                            monthRates[j].rates[k],
+                            block.timestamp + ((i + 1) * 30 days),
+                            monthRates[j].month,
+                            monthRates[j].year,
+                            address(oracles[i])
+                        )
+                    );
+                    console.log(unicode"✅ LendingPool deployed:");
+                    console.log("Collateral:", collaterals[i].symbol());
+                    console.log("Month:", monthRates[j].month);
+                    console.log("Rate:", monthRates[j].rates[k]);
+                    console.log("Address:", address(lendingPools[poolIndex]));
 
-            // Approve & Supply Collateral ke LendingPool
-            collaterals[i].approve(address(lendingPools[i]), supplyAmounts[i]); // Approve hanya collateral yang sesuai
-            lendingPools[i].supplyCollateral(supplyAmounts[i]);
-            console.log(
-                unicode"✅ SUPPLY_COLLATERAL %s ke LendingPool %s sebesar %s",
-                collaterals[i].symbol(),
-                months[i],
-                supplyAmounts[i]
-            );
+                    uint256 usdcSupply = 250_000e6;
+                    uint256 collateralSupply = mintAmounts[i] / 40; // Dibagi 40 agar cukup
+
+                    // Supply USDC ke LendingPool
+                    musdc.approve(address(lendingPools[poolIndex]), usdcSupply);
+                    lendingPools[poolIndex].supply(owner, usdcSupply);
+                    console.log(
+                        unicode"✅ SUPPLY %s USDC to LendingPool %s-%d",
+                        usdcSupply,
+                        monthRates[j].month,
+                        monthRates[j].rates[k]
+                    );
+
+                    // Supply Collateral ke LendingPool
+                    collaterals[i].approve(
+                        address(lendingPools[poolIndex]),
+                        collateralSupply
+                    );
+                    lendingPools[poolIndex].supplyCollateral(collateralSupply);
+                    console.log(
+                        unicode"✅ SUPPLY_COLLATERAL %s to LendingPool %s-%d",
+                        collaterals[i].symbol(),
+                        monthRates[j].month,
+                        monthRates[j].rates[k]
+                    );
+                }
+            }
         }
 
         console.log(unicode"\n🏦 Deploying MockGTXOrderBook...");
@@ -165,8 +264,17 @@ contract DeployMocks is DeployHelpers {
         );
 
         console.log(unicode"\n🎉 DEPLOYMENT COMPLETED 🎉");
+        saveDeployment(
+            "./deployments.json",
+            address(musdc),
+            collaterals,
+            address(lendingPoolManager),
+            address(pinjocRouter),
+            address(mockGTXOrderBook),
+            lendingPools,
+            monthRates
+        );
 
         vm.stopBroadcast();
-        exportDeployments();
     }
 }
