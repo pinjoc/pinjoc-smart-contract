@@ -82,7 +82,6 @@ contract DeployMocks is DeployHelpers {
             oracles[i].setPrice(prices[i]);
             console.log(
                 unicode"✅ MockOracle for %s deployed at: %s",
-                months[i],
                 address(oracles[i])
             );
         }
