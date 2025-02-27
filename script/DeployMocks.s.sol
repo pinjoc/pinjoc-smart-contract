@@ -105,15 +105,15 @@ contract DeployMocks is DeployHelpers {
 
         // Deploy Mock Tokens
         console.log(unicode"🪙 Deploying Mock Tokens...");
-        MockToken musdc = new MockToken("Mock USDC", "MUSDC", 6);
+        MockToken musdc = MockToken(0x0F848482cC12EA259DA229e7c5C4949EdA7E6475);
         console.log(unicode"✅ Mock USDC deployed at: %s", address(musdc));
 
         MockToken[5] memory collaterals = [
-            new MockToken("Mock WETH", "MWETH", 18),
-            new MockToken("Mock WBTC", "MWBTC", 8),
-            new MockToken("Mock SOL", "MSOL", 18),
-            new MockToken("Mock Chainlink", "MLINK", 18),
-            new MockToken("Mock AAVE", "MAAVE", 18)
+            MockToken(0xa8014bB3A0020C0FF326Ef3AF3E1c55F6e5B25c7),
+            MockToken(0xf14442CCE4511D0B5DC34425bceA50Ca67626c3a),
+            MockToken(0x12eC2c5144CF6feCCE8927cB1F748e9f60a97682),
+            MockToken(0x19477F1e5515AF38E6C85F14C43DEb538d475524),
+            MockToken(0x4b95Ba646c2Ed7fAB76e7C0a04245c61A9d4D686)
         ];
 
         address[] memory collateralAddresses = new address[](
@@ -173,12 +173,8 @@ contract DeployMocks is DeployHelpers {
         }
 
         // Minting otomatis ke wallet testnet
-        address[5] memory testWallets = [
-            makeAddr("testWallet1"),
-            makeAddr("testWallet2"),
-            makeAddr("testWallet3"),
-            makeAddr("testWallet4"),
-            makeAddr("testWallet5")
+        address[1] memory testWallets = [
+            0x4176377dA5287Ec4eE6e60b1cA16210FC0Ab27FA
         ];
 
         uint256 mintAmountMusdc = 10_000e6;
@@ -293,7 +289,11 @@ contract DeployMocks is DeployHelpers {
             address(collaterals[0]),
             1000e6,
             0,
+<<<<<<< HEAD
             7e16, // 7% APY
+=======
+            7e16, // 5% APY
+>>>>>>> 5f59bf50bdc1811dfb9b6ee1016c82351a6c31aa
             block.timestamp + 90 days,
             "MAY",
             2025,
