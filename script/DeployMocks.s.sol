@@ -172,6 +172,38 @@ contract DeployMocks is DeployHelpers {
             );
         }
 
+        // Minting otomatis ke wallet testnet
+        address[5] memory testWallets = [
+            makeAddr("testWallet1"),
+            makeAddr("testWallet2"),
+            makeAddr("testWallet3"),
+            makeAddr("testWallet4"),
+            makeAddr("testWallet5")
+        ];
+
+        uint256 mintAmountMusdc = 10_000e6;
+        uint256 mintAmountCollateral = 5e18;
+
+        console.log(unicode"\n💰 Minting Tokens to Test Wallets...");
+        for (uint256 i = 0; i < testWallets.length; i++) {
+            musdc.mint(testWallets[i], mintAmountMusdc);
+            console.log(
+                unicode"✅ Minted %s MUSDC to %s",
+                mintAmountMusdc,
+                testWallets[i]
+            );
+
+            for (uint256 j = 0; j < collaterals.length; j++) {
+                collaterals[j].mint(testWallets[i], mintAmountCollateral);
+                console.log(
+                    unicode"✅ Minted %s %s to %s",
+                    mintAmountCollateral,
+                    collaterals[j].symbol(),
+                    testWallets[i]
+                );
+            }
+        }
+
         // Deploy LendingPoolManager
         console.log(unicode"\n🏦 Deploying LendingPoolManager...");
         LendingPoolManager lendingPoolManager = new LendingPoolManager();
