@@ -4,7 +4,6 @@ pragma solidity ^0.8.13;
 import {Status, Side} from "../types/Types.sol";
 
 interface IMockGTXOrderBook {
-
     struct Order {
         uint256 id;
         address baseToken;
@@ -15,6 +14,8 @@ interface IMockGTXOrderBook {
         Side side;
         Status status;
     }
+
+    error OrderNotFound();
 
     event LimitOrderPlaced(
         uint256 orderId,
@@ -27,19 +28,11 @@ interface IMockGTXOrderBook {
         Status status
     );
 
-    event LimitOrderMatched(
-        uint256 orderId,
-        Status status
-    );
+    event LimitOrderMatched(uint256 orderId, Status status);
 
-    event LimitOrderCancelled(
-        uint256 orderId,
-        Status status
-    );
+    event LimitOrderCancelled(uint256 orderId, Status status);
 
     function placeLimitOrder(
-        address baseToken,
-        address quoteToken,
         address trader,
         uint256 amount,
         uint256 price,
@@ -47,7 +40,9 @@ interface IMockGTXOrderBook {
         bool isMatch
     ) external returns (uint256, Status);
 
-    function getUserOrders(address trader) external view returns (Order[] memory);
+    function getUserOrders(
+        address trader
+    ) external view returns (Order[] memory);
 
     function cancelOrder(address trader, uint256 orderId) external;
 }
