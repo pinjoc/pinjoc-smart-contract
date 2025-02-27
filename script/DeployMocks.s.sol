@@ -231,9 +231,7 @@ contract DeployMocks is DeployHelpers {
         musdc.approve(address(lendingPoolManager), type(uint256).max);
 
         // Deploy Lending Pools and Place Orders
-        LendingPool[] memory lendingPools = new LendingPool[](
-            collaterals.length
-        );
+        LendingPool[] memory lendingPools = new LendingPool[](2);
 
         // Calculate required collateral (Added 10% buffer)
         uint256 requiredCollateral = 1e18;
@@ -274,6 +272,18 @@ contract DeployMocks is DeployHelpers {
                 address(oracles[0])
             )
         );
+        lendingPools[1] = LendingPool(
+            lendingPoolManager.createLendingPool(
+                address(pinjocRouter),
+                address(musdc),
+                address(collaterals[0]),
+                7e16,
+                block.timestamp + 90 days,
+                "MAY",
+                2025,
+                address(oracles[0])
+            )
+        );
 
         console.log(unicode"\n📌 placeOrder...");
 
@@ -283,7 +293,7 @@ contract DeployMocks is DeployHelpers {
             address(collaterals[0]),
             1000e6,
             0,
-            5e16, // 5% APY
+            7e16, // 7% APY
             block.timestamp + 90 days,
             "MAY",
             2025,
@@ -294,7 +304,7 @@ contract DeployMocks is DeployHelpers {
         pinjocRouter.placeOrder(
             address(musdc),
             address(collaterals[0]),
-            2000e6,
+            1250e6,
             requiredCollateral,
             5e16, // 5% APY
             block.timestamp + 90 days,
@@ -304,19 +314,19 @@ contract DeployMocks is DeployHelpers {
         );
 
         console.log(unicode"\n🎉 DEPLOYMENT COMPLETED 🎉");
-        for (uint256 i = 0; i < collaterals.length; i++) {
-            collateralAddresses[i] = address(collaterals[i]);
-            oracleAddresses[i] = address(oracles[i]);
-            lendingPoolAddresses[i] = address(lendingPools[i]);
-        }
-        saveDeploymentToFile(
-            address(musdc),
-            collateralAddresses,
-            oracleAddresses,
-            address(lendingPoolManager),
-            address(pinjocRouter),
-            lendingPoolAddresses
-        );
+        // for (uint256 i = 0; i < collaterals.length; i++) {
+        //     collateralAddresses[i] = address(collaterals[i]);
+        //     oracleAddresses[i] = address(oracles[i]);
+        //     lendingPoolAddresses[i] = address(lendingPools[i]);
+        // }
+        // saveDeploymentToFile(
+        //     address(musdc),
+        //     collateralAddresses,
+        //     oracleAddresses,
+        //     address(lendingPoolManager),
+        //     address(pinjocRouter),
+        //     lendingPoolAddresses
+        // );
         vm.stopBroadcast();
     }
 }
