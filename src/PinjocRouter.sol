@@ -8,10 +8,10 @@ import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/exten
 
 import {MockGTXOrderBook} from "./mocks/MockGTXOrderBook.sol";
 import {LendingOrderType, Status} from "./types/Types.sol";
-import {OrderBookToken} from "./OrderBookToken.sol";
 import {IMockGTXOrderBook} from "./interfaces/IMockGTXOrderBook.sol";
 import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
 import {ILendingPool} from "./interfaces/ILendingPool.sol";
+import {IMockOracle} from "./interfaces/IMockOracle.sol";
 import {Uint256Library, Side} from "./types/Types.sol";
 
 using Uint256Library for uint256;
@@ -27,6 +27,7 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
     error OrderBookNotFound();
     error LendingPoolNotFound();
     error DelegateCallFailed();
+    error InsufficientCollateral();
 
     event OrderPlaced(
         uint256 orderId,
@@ -62,19 +63,14 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
     ) external onlyOwner {
         if (_debtToken == address(0) || _collateralToken == address(0))
             revert InvalidAddressParameter();
-        string memory debtTokenOBSymbol = getOrderBookSymbol(
-            _debtToken,
-            _maturityMonth,
-            _maturityYear
-        );
 
-        string memory collateralTokenOBSymbol = getOrderBookSymbol(
-            _collateralToken,
-            _maturityMonth,
-            _maturityYear
-        );
         orderBookMapping[
-            string(abi.encodePacked(debtTokenOBSymbol, collateralTokenOBSymbol))
+            string(
+                abi.encodePacked(
+                    getOrderBookSymbol(_debtToken, _maturityMonth, _maturityYear),
+                    getOrderBookSymbol(_collateralToken,_maturityMonth,_maturityYear)
+                )
+            )
         ] = address(new MockGTXOrderBook(_debtToken, _collateralToken));
     }
 
@@ -83,7 +79,7 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
         address _collateralToken,
         string calldata _maturityMonth,
         uint256 _maturityYear
-    ) internal view returns (address) {
+    ) public view returns (address) {
         return
             orderBookMapping[
                 string(
@@ -118,16 +114,47 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
             );
     }
 
+    function _isHealthy(
+        address _debtToken,
+        address _collateralToken,
+        uint256 _rate,
+        string calldata _maturityMonth,
+        uint256 _maturityYear,
+        uint256 _borrowedAmount,
+        uint256 _collateralAmount
+    ) internal view {
+        require(
+            IERC20(_collateralToken).balanceOf(msg.sender) >= _collateralAmount,
+            "Balance not enough"
+        );
+        address lendingPoolAddress = lendingPoolManager.getLendingPool(
+            _debtToken,
+            _collateralToken,
+            _rate,
+            _maturityMonth,
+            _maturityYear
+        );
+        if (lendingPoolAddress == address(0)) revert LendingPoolNotFound();
+
+        uint256 collateralPrice = IMockOracle(ILendingPool(lendingPoolAddress).oracle()).price();
+        uint256 collateralDecimals = 10 ** IERC20Metadata(_collateralToken).decimals();
+
+        uint256 collateralValue = _collateralAmount * collateralPrice / collateralDecimals;
+        uint256 maxBorrowValue = collateralValue * ILendingPool(lendingPoolAddress).ltv() / 1e18;
+
+        if (_borrowedAmount > maxBorrowValue) revert InsufficientCollateral();
+    }
+
     function placeOrder(
         address _debtToken, // lender's token - CA USDC
         address _collateralToken, // borrower's token - CA ETH
         uint256 _amount, // amount of token debt token not collateral token - 500K$
+        uint256 _collateralAmount, // amount of token collateral token not debt token - 1ETH
         uint256 _rate, // APY percentage (18 decimals), e.g. for 100% pass 1e18 or 100e16, for 5% pass 5e16 - 4%
         uint256 _maturity, // maturity date in unix timestamp - 31 Maret 2025
         string calldata _maturityMonth, // MAR
         uint256 _maturityYear, // 2025
-        LendingOrderType _lendingOrderType, // LEND
-        bool _isMatchOrder
+        LendingOrderType _lendingOrderType // LEND
     ) external nonReentrant {
         if (
             _debtToken == address(0) ||
@@ -145,12 +172,43 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
         if (orderBookAddr == address(0)) revert OrderBookNotFound();
         IMockGTXOrderBook orderBook = IMockGTXOrderBook(orderBookAddr);
 
-        (uint256 orderId, Status status) = orderBook.placeLimitOrder(
+        // Send token to the order book
+        if (_lendingOrderType == LendingOrderType.LEND) {
+            require(
+                IERC20(_debtToken).balanceOf(msg.sender) >= _amount,
+                "Balance not enough"
+            );
+            IERC20(_debtToken).transferFrom(msg.sender, address(this), _amount);
+            IERC20(_debtToken).approve(orderBookAddr, _amount);
+        } else {
+            _isHealthy(
+                _debtToken,
+                _collateralToken,
+                _rate,
+                _maturityMonth,
+                _maturityYear,
+                _amount,
+                _collateralAmount
+            );
+
+            IERC20(_collateralToken).transferFrom(msg.sender, address(this), _collateralAmount);
+            IERC20(_collateralToken).approve(orderBookAddr, _collateralAmount);
+        }
+
+        (
+            uint256 orderId, 
+            address lender, 
+            address borrower, 
+            uint256 debtAmount,
+            uint256 borrowerAmount,
+            uint256 collateralAmount,
+            Status status
+        ) = orderBook.placeLimitOrder(
             msg.sender,
             _amount,
+            _collateralAmount,
             _rate,
-            _lendingOrderType.convertToSide(),
-            _isMatchOrder
+            _lendingOrderType.convertToSide()
         );
 
         emit OrderPlaced(
@@ -166,7 +224,7 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
             status
         );
 
-        if (_isMatchOrder) {
+        if (status == Status.FILLED || status == Status.PARTIALLY_FILLED) {
             address lendingPoolAddress = lendingPoolManager.getLendingPool(
                 _debtToken,
                 _collateralToken,
@@ -176,20 +234,14 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
             );
             if (lendingPoolAddress == address(0)) revert LendingPoolNotFound();
 
-            if (_lendingOrderType == LendingOrderType.LEND) {
-                require(
-                    IERC20(_debtToken).transferFrom(
-                        msg.sender,
-                        address(this),
-                        _amount
-                    ),
-                    "Transfer failed"
-                );
-                IERC20(_debtToken).approve(lendingPoolAddress, _amount);
-                ILendingPool(lendingPoolAddress).supply(msg.sender, _amount);
-            } else if (_lendingOrderType == LendingOrderType.BORROW) {
-                ILendingPool(lendingPoolAddress).borrow(msg.sender, _amount);
-            }
+            if (debtAmount < borrowerAmount) borrowerAmount = debtAmount;
+
+            ILendingPool(lendingPoolAddress).supply(lender, debtAmount);
+            ILendingPool(lendingPoolAddress).supplyCollateral(borrower, collateralAmount);
+            ILendingPool(lendingPoolAddress).borrow(borrower, borrowerAmount);
+
+            orderBook.transferFrom(lender, borrower, borrowerAmount, Side.BUY);
+            orderBook.transferFrom(borrower, lendingPoolAddress, collateralAmount, Side.SELL);
         }
     }
 

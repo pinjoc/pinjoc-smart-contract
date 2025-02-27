@@ -3,65 +3,108 @@ pragma solidity ^0.8.0;
 
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {IMockGTXOrderBook} from "../interfaces/IMockGTXOrderBook.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Status, Side} from "../types/Types.sol";
 
 contract MockGTXOrderBook is IMockGTXOrderBook, Ownable {
-    address baseToken;
-    address quoteToken;
+
+    // buy = lend, thus must deposit debt token = quote token
+    // sell = borrow, thus must deposit collateral token = base token
+
+    IERC20 public quoteToken; // USDC
+    IERC20 public baseToken; // ETH
+
     uint256 public orderCount;
+    mapping(address => uint256) public baseBalances;
+    mapping(address => uint256) public quoteBalances;
 
-    // Mapping from trader address to their orders.
     mapping(address => Order[]) public traderOrders;
+    mapping(uint256 => mapping(Side => Order[])) public orderBook;
 
-    constructor(address _baseToken, address _quoteToken) Ownable(msg.sender) {
-        baseToken = _baseToken;
-        quoteToken = _quoteToken;
+    constructor(address _quoteToken, address _baseToken) Ownable(msg.sender) {
+        quoteToken = IERC20(_quoteToken);
+        baseToken = IERC20(_baseToken);
     }
 
-    // Public function to place a limit order with added baseToken and quoteToken parameters.
     function placeLimitOrder(
         address trader,
         uint256 amount,
+        uint256 collateralAmount,
         uint256 price,
-        Side side,
-        bool isMatch
-    ) external returns (uint256, Status) {
+        Side side
+    ) external returns (uint256, address, address, uint256, uint256, uint256, Status) {
         uint256 orderId = orderCount;
         orderCount++;
-        Order memory newOrder = Order(
-            orderId,
-            baseToken,
-            quoteToken,
-            trader,
-            amount,
-            price,
-            side,
-            Status.OPEN
-        );
-        emit LimitOrderPlaced(
-            orderId,
-            baseToken,
-            quoteToken,
-            trader,
-            amount,
-            price,
-            side,
-            Status.OPEN
-        );
 
-        if (isMatch) {
-            newOrder.status = Status.FILLED;
-            emit LimitOrderMatched(orderId, Status.FILLED);
+        // Handle deposit inside placeLimitOrder
+        if (side == Side.BUY) {
+            require(quoteToken.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+            quoteBalances[trader] += amount;
+            emit Deposit(trader, amount, Side.BUY);
+        } else {
+            require(baseToken.transferFrom(msg.sender, address(this), collateralAmount), "Transfer failed");
+            baseBalances[trader] += collateralAmount;
+            emit Deposit(trader, collateralAmount, Side.SELL);
         }
 
-        traderOrders[trader].push(newOrder);
+        Order memory newOrder = Order(orderId, trader, amount, collateralAmount, price, side, Status.OPEN);
 
-        return (orderId, newOrder.status);
+        Side oppositeSide = side == Side.BUY ? Side.SELL : Side.BUY;
+        Order[] storage oppositeOrders = orderBook[price][oppositeSide];
+
+        address buyer;
+        address seller;
+        uint256 buyerAmount;
+        uint256 sellerAmount;
+        if (oppositeOrders.length > 0) {
+            Order storage matchingOrder = oppositeOrders[0];
+
+            if (matchingOrder.side == Side.BUY) {
+                buyer = matchingOrder.trader;
+                seller = newOrder.trader;
+                buyerAmount = matchingOrder.amount;
+                sellerAmount =  newOrder.amount;
+                collateralAmount = newOrder.collateralAmount;
+            } else {
+                buyer = newOrder.trader;
+                seller = matchingOrder.trader;
+                buyerAmount = newOrder.amount;
+                sellerAmount = matchingOrder.amount;
+                collateralAmount = matchingOrder.collateralAmount;
+            }
+
+            if (matchingOrder.amount <= newOrder.amount) {
+                matchingOrder.amount = 0;
+                newOrder.amount -= matchingOrder.amount;
+
+                if(newOrder.amount == 0) {
+                    matchingOrder.status = Status.FILLED;
+                    newOrder.status = Status.FILLED;
+                    emit OrderMatched(newOrder.id, matchingOrder.id, Status.FILLED, Status.FILLED);
+                } else {
+                    matchingOrder.status = Status.FILLED;
+                    newOrder.status = Status.PARTIALLY_FILLED;
+                    emit OrderMatched(newOrder.id, matchingOrder.id, Status.PARTIALLY_FILLED, Status.FILLED);
+                }
+
+                _removeOrderFromBook(price, oppositeSide, 0);
+                _removeTraderOrder(matchingOrder.trader, matchingOrder.id);
+            } else {
+                matchingOrder.amount -= newOrder.amount;
+                matchingOrder.status = Status.PARTIALLY_FILLED;
+                newOrder.status = Status.FILLED;
+                emit OrderMatched(newOrder.id, matchingOrder.id, Status.FILLED, Status.PARTIALLY_FILLED);
+            }
+        }
+        else {
+            orderBook[price][side].push(newOrder);
+            traderOrders[trader].push(newOrder);
+        }
+
+        return (orderId, buyer, seller, buyerAmount, sellerAmount, collateralAmount, newOrder.status);
     }
 
-    function getUserOrders(
-        address trader
-    ) external view returns (Order[] memory) {
+    function getUserOrders(address trader) external view returns (Order[] memory) {
         return traderOrders[trader];
     }
 
@@ -72,10 +115,65 @@ contract MockGTXOrderBook is IMockGTXOrderBook, Ownable {
             if (orders[i].id == orderId) {
                 orders[i].status = Status.CANCELLED;
                 emit LimitOrderCancelled(orderId, Status.CANCELLED);
+
+                _removeOrderFromBook(orders[i].price, orders[i].side, _findOrderIndex(orderBook[orders[i].price][orders[i].side], orderId));
+                _removeTraderOrder(trader, orderId);
+
+                // Refund based on escrow balance (not checking real ERC20 balance)
+                if (orders[i].side == Side.BUY) {
+                    uint256 refundAmount = orders[i].amount * orders[i].price;
+                    require(quoteBalances[trader] >= refundAmount, "Insufficient escrow balance");
+                    quoteBalances[trader] -= refundAmount;
+                    require(quoteToken.transfer(trader, refundAmount), "Refund failed");
+                } else {
+                    require(baseBalances[trader] >= orders[i].amount, "Insufficient escrow balance");
+                    baseBalances[trader] -= orders[i].amount;
+                    require(baseToken.transfer(trader, orders[i].amount), "Refund failed");
+                }
+
                 break;
             }
         }
+    }
 
-        revert OrderNotFound();
+    function transferFrom(address from, address to, uint256 amount, Side side) external onlyOwner {
+        if (side == Side.BUY) {
+            require(quoteBalances[from] >= amount, "Insufficient quote escrow");
+            quoteBalances[from] -= amount;
+            require(quoteToken.transfer(to, amount), "Quote transfer failed");
+        } else {
+            require(baseBalances[from] >= amount, "Insufficient base escrow");
+            baseBalances[from] -= amount;
+            require(baseToken.transfer(to, amount), "Base transfer failed");
+        }
+
+        emit Transfer(from, to, amount, side);
+    }
+
+    function _removeOrderFromBook(uint256 price, Side side, uint256 index) internal {
+        Order[] storage queue = orderBook[price][side];
+        if (queue.length > 0 && index < queue.length) {
+            queue[index] = queue[queue.length - 1];
+            queue.pop();
+            emit OrderRemovedFromBook(queue[index].id, price, side);
+        }
+    }
+
+    function _removeTraderOrder(address trader, uint256 orderId) internal {
+        Order[] storage orders = traderOrders[trader];
+        uint256 index = _findOrderIndex(orders, orderId);
+        if (index < orders.length) {
+            orders[index] = orders[orders.length - 1];
+            orders.pop();
+        }
+    }
+
+    function _findOrderIndex(Order[] storage orders, uint256 orderId) internal view returns (uint256) {
+        for (uint256 i = 0; i < orders.length; i++) {
+            if (orders[i].id == orderId) {
+                return i;
+            }
+        }
+        return orders.length;
     }
 }

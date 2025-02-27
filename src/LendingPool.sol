@@ -4,12 +4,13 @@ pragma solidity ^0.8.13;
 import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 import {PinjocToken} from "./PinjocToken.sol";
 import {IMockOracle} from "./interfaces/IMockOracle.sol";
 import {ILendingPool} from "./interfaces/ILendingPool.sol";
 
-contract LendingPool is ReentrancyGuard, ILendingPool {
+contract LendingPool is ReentrancyGuard, ILendingPool, Ownable {
 
     // Errors
     error InvalidConstructorParameter();
@@ -30,6 +31,7 @@ contract LendingPool is ReentrancyGuard, ILendingPool {
     event Repay(address user, uint256 amount, uint256 shares);
     event FlashLoan(address user, address token, uint256 amount);
 
+    address public pinjocRouter;
     address public debtToken; // USDC
     address public collateralToken; // ETH
     address public oracle; // USDC-ETH Oracle
@@ -54,6 +56,7 @@ contract LendingPool is ReentrancyGuard, ILendingPool {
     uint256 public ltv; // 70% Loan to Value (70% in 18 decimals)
 
     constructor(
+        address _pinjocRouter,
         address _debtToken,
         address _collateralToken,
         address _oracle,
@@ -62,7 +65,8 @@ contract LendingPool is ReentrancyGuard, ILendingPool {
         uint256 _maturity,
         string memory _maturityMonth,
         uint256 _maturityYear
-    ) {
+    ) Ownable(_pinjocRouter) {
+        
         if (
             _debtToken == address(0) ||
             _collateralToken == address(0) ||
@@ -71,7 +75,7 @@ contract LendingPool is ReentrancyGuard, ILendingPool {
             _maturity <= block.timestamp ||
             _ltv > 100e16
         ) revert InvalidConstructorParameter();
-
+        
         debtToken = _debtToken;
         collateralToken = _collateralToken;
         oracle = _oracle;
@@ -82,9 +86,8 @@ contract LendingPool is ReentrancyGuard, ILendingPool {
         pinjocToken = address(new PinjocToken(_debtToken, _collateralToken, _borrowRate, _maturityMonth, _maturityYear, address(this)));
     }
 
-    function supply(address user, uint256 amount) external nonReentrant {
+    function supply(address user, uint256 amount) external nonReentrant onlyOwner {
         if (amount == 0) revert ZeroAmount();
-        if (IERC20(debtToken).balanceOf(user) < amount) revert InsufficientLiquidity();
         _accrueInterest();
 
         uint256 shares = 0;
@@ -98,14 +101,12 @@ contract LendingPool is ReentrancyGuard, ILendingPool {
         totalSupplyAssets += amount;
         
         PinjocToken(pinjocToken).mint(user, shares);
-        IERC20(debtToken).transferFrom(msg.sender, address(this), amount);
 
         emit Supply(user, amount, shares);
     }
 
-    function borrow(address user, uint256 amount) external nonReentrant {
+    function borrow(address user, uint256 amount) external nonReentrant onlyOwner {
         if (amount == 0) revert ZeroAmount();
-        if (IERC20(debtToken).balanceOf(address(this)) < amount) revert InsufficientLiquidity();
         _accrueInterest();
 
         uint256 shares = 0;
@@ -120,8 +121,6 @@ contract LendingPool is ReentrancyGuard, ILendingPool {
         totalBorrowAssets += amount;
 
         _isHealthy(user);
-
-        IERC20(debtToken).transfer(user, amount);
 
         emit Borrow(user, amount, shares);
     }
@@ -145,16 +144,13 @@ contract LendingPool is ReentrancyGuard, ILendingPool {
         emit Withdraw(msg.sender, amount, shares);
     }
 
-    function supplyCollateral(uint256 amount) external nonReentrant {
+    function supplyCollateral(address user, uint256 amount) external nonReentrant onlyOwner {
         if (amount == 0) revert ZeroAmount();
-        if (IERC20(collateralToken).balanceOf(msg.sender) < amount) revert InsufficientLiquidity();
         _accrueInterest();
 
-        userCollaterals[msg.sender] += amount;
+        userCollaterals[user] += amount;
 
-        IERC20(collateralToken).transferFrom(msg.sender, address(this), amount);
-
-        emit SupplyCollateral(msg.sender, amount);
+        emit SupplyCollateral(user, amount);
     }
 
     function withdrawCollateral(uint256 amount) external nonReentrant {

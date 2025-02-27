@@ -42,6 +42,7 @@ contract LendingPoolManager is Ownable, ReentrancyGuard, ILendingPoolManager {
     }
 
     function createLendingPool(
+        address _pinjocRouter,
         address _debtToken,
         address _collateralToken,
         uint256 _rate,
@@ -61,6 +62,7 @@ contract LendingPoolManager is Ownable, ReentrancyGuard, ILendingPoolManager {
 
         lendingPools[key] = address(
             new LendingPool(
+                _pinjocRouter,
                 _debtToken,
                 _collateralToken,
                 _oracle,
