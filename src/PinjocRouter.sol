@@ -252,8 +252,6 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
         uint256 _maturityYear,
         uint256 _orderId
     ) external nonReentrant {
-        if (_orderId == 0) revert InvalidPlaceOrderParameter();
-
         address orderBookAddr = getOrderBookAddress(
             _debtToken,
             _collateralToken,

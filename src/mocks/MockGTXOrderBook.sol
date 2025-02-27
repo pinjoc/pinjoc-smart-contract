@@ -86,9 +86,7 @@ contract MockGTXOrderBook is IMockGTXOrderBook, Ownable {
                     newOrder.status = Status.PARTIALLY_FILLED;
                     emit OrderMatched(newOrder.id, matchingOrder.id, Status.PARTIALLY_FILLED, Status.FILLED);
                 }
-
-                _removeOrderFromBook(price, oppositeSide, 0);
-                _removeTraderOrder(matchingOrder.trader, matchingOrder.id);
+                
             } else {
                 matchingOrder.amount -= newOrder.amount;
                 matchingOrder.status = Status.PARTIALLY_FILLED;
@@ -116,19 +114,17 @@ contract MockGTXOrderBook is IMockGTXOrderBook, Ownable {
                 orders[i].status = Status.CANCELLED;
                 emit LimitOrderCancelled(orderId, Status.CANCELLED);
 
-                _removeOrderFromBook(orders[i].price, orders[i].side, _findOrderIndex(orderBook[orders[i].price][orders[i].side], orderId));
-                _removeTraderOrder(trader, orderId);
-
                 // Refund based on escrow balance (not checking real ERC20 balance)
                 if (orders[i].side == Side.BUY) {
-                    uint256 refundAmount = orders[i].amount * orders[i].price;
+                    uint256 refundAmount = orders[i].amount;
                     require(quoteBalances[trader] >= refundAmount, "Insufficient escrow balance");
                     quoteBalances[trader] -= refundAmount;
                     require(quoteToken.transfer(trader, refundAmount), "Refund failed");
                 } else {
-                    require(baseBalances[trader] >= orders[i].amount, "Insufficient escrow balance");
-                    baseBalances[trader] -= orders[i].amount;
-                    require(baseToken.transfer(trader, orders[i].amount), "Refund failed");
+                    uint256 collateralAmount = orders[i].collateralAmount;
+                    require(baseBalances[trader] >= collateralAmount, "Insufficient escrow balance");
+                    baseBalances[trader] -= collateralAmount;
+                    require(baseToken.transfer(trader, collateralAmount), "Refund failed");
                 }
 
                 break;
@@ -148,32 +144,5 @@ contract MockGTXOrderBook is IMockGTXOrderBook, Ownable {
         }
 
         emit Transfer(from, to, amount, side);
-    }
-
-    function _removeOrderFromBook(uint256 price, Side side, uint256 index) internal {
-        Order[] storage queue = orderBook[price][side];
-        if (queue.length > 0 && index < queue.length) {
-            queue[index] = queue[queue.length - 1];
-            queue.pop();
-            emit OrderRemovedFromBook(queue[index].id, price, side);
-        }
-    }
-
-    function _removeTraderOrder(address trader, uint256 orderId) internal {
-        Order[] storage orders = traderOrders[trader];
-        uint256 index = _findOrderIndex(orders, orderId);
-        if (index < orders.length) {
-            orders[index] = orders[orders.length - 1];
-            orders.pop();
-        }
-    }
-
-    function _findOrderIndex(Order[] storage orders, uint256 orderId) internal view returns (uint256) {
-        for (uint256 i = 0; i < orders.length; i++) {
-            if (orders[i].id == orderId) {
-                return i;
-            }
-        }
-        return orders.length;
     }
 }
