@@ -61,7 +61,7 @@ PINJOC is a decentralized fixed-rate lending protocol that revolutionizes DeFi l
 - 🏦 Secure lending pool management
 - 🎟 Tokenized bond issuance system
 - 🛡 Collateral tracking and management
-- 📈 Automated interest rate adjustment
+- 📈 Fixed-interest rate based on supply and demand
 
 ### 🔥 Auto Liquidation System
 - 📡 Real-time health factor monitoring
