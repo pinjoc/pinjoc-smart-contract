@@ -5,8 +5,8 @@ import {Test, console} from "forge-std/Test.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 import {PinjocRouter} from "../src/PinjocRouter.sol";
-import {IMockGTXOrderBook} from "../src/interfaces/IMockGTXOrderBook.sol";
-import {MockGTXOrderBook} from "../src/mocks/MockGTXOrderBook.sol";
+import {IMockGTXOBLending} from "../src/interfaces/IMockGTXOBLending.sol";
+import {MockGTXOBLending} from "../src/mocks/MockGTXOBLending.sol";
 import {LendingPoolManager} from "../src/LendingPoolManager.sol";
 import {LendingPool} from "../src/LendingPool.sol";
 import {PinjocToken} from "../src/PinjocToken.sol";
@@ -23,15 +23,15 @@ contract PinjocRouterBaseTest is Test {
     MockOracle wethUsdcOracle;
     LendingPoolManager public lendingPoolManager;
     LendingPool public lendingPool;
+    MockGTXOBLending orderBook;
 
     address owner = makeAddr("owner");
 
     address lender = makeAddr("lender");
-    uint256 lenderDefaultBalance = 1000e6; // 1000USDC
+    uint256 lenderDefaultBalance = 2000e6; // 1000USDC
 
     address borrower = makeAddr("borrower");
     uint256 borrowerDefaultCollateral = 1e18; // 1WETH = 2500USDC
-    uint256 borrowerDefaultBalance = 2000e6; // 2500USDC
 
     function setUp() public {
         vm.createSelectFork("https://eth-mainnet.g.alchemy.com/v2/Ea4M-V84UObD22z2nNlwDD9qP8eqZuSI");
@@ -44,6 +44,8 @@ contract PinjocRouterBaseTest is Test {
         
         pinjocRouter = new PinjocRouter(address(lendingPoolManager));
         pinjocRouter.createOrderBook(usdc, weth, "MAY", 2025);
+
+        orderBook = MockGTXOBLending(pinjocRouter.getOrderBookAddress(usdc, weth, "MAY", 2025));
 
         lendingPool = LendingPool(
             lendingPoolManager.createLendingPool(
@@ -62,13 +64,13 @@ contract PinjocRouterBaseTest is Test {
         deal(weth, borrower, borrowerDefaultCollateral); // 1 WETH = 2500USDC
     }
 
-    function setUp_LendLimitOrder() public {
+    function setUp_LendOrder(uint256 lendingAmount) public {
         vm.startPrank(lender);
         IERC20(usdc).approve(address(pinjocRouter), lenderDefaultBalance);
         pinjocRouter.placeOrder(
             usdc,
             weth,
-            lenderDefaultBalance,
+            lendingAmount,
             0,
             5e16, // 5% APY
             block.timestamp + 90 days,
@@ -79,14 +81,14 @@ contract PinjocRouterBaseTest is Test {
         vm.stopPrank();
     }
 
-    function setUp_BorrowLimitOrder() public {
+    function setUp_BorrowOrder(uint256 borrowAmount, uint256 collateralAmount) public {
         vm.startPrank(borrower);
         IERC20(weth).approve(address(pinjocRouter), borrowerDefaultCollateral);
         pinjocRouter.placeOrder(
             usdc,
             weth,
-            2000e6, // 90% of 1 WETH = 2500USDC
-            borrowerDefaultCollateral,
+            borrowAmount, // 90% of 1 WETH = 2500USDC
+            collateralAmount,
             5e16, // 5% APY
             block.timestamp + 90 days,
             "MAY",
@@ -97,112 +99,169 @@ contract PinjocRouterBaseTest is Test {
     }
 }
 
-contract PinjocRouterLimitOrderTest is PinjocRouterBaseTest {
+contract PinjocRouterPlaceOrderFlowTest is PinjocRouterBaseTest {
 
-    function test_LendLimitOrder_Matched() public {
-        setUp_BorrowLimitOrder();
+    function test_LendOrder() public {
+        uint256 lendAmount = 1000e6; // 1000USDC
 
-        uint256 amount = 1000e6; // 100USDC
-        uint256 rate = 5e16; // 5% APY
-        uint256 maturity = block.timestamp + 90 days;
-        string memory maturityMonth = "MAY";
-        uint256 maturityYear = 2025;
-        LendingOrderType lendingOrderType = LendingOrderType.LEND;
+        setUp_LendOrder(lendAmount);
 
-        vm.startPrank(lender);
-        IERC20(usdc).approve(address(pinjocRouter), amount);
-        pinjocRouter.placeOrder(
-            usdc,
-            weth,
-            amount,
-            0,
-            rate,
-            maturity,
-            maturityMonth,
-            maturityYear,
-            lendingOrderType
-        );
-        vm.stopPrank();
+        (, address trader, uint256 amount, , , , Status status) = orderBook.orderQueue(5e16, Side.BUY, 0);
+        assertEq(trader, lender);
+        assertEq(amount, lendAmount);
+        assertEq(uint256(status), uint256(Status.OPEN));
 
-        MockGTXOrderBook orderBook = MockGTXOrderBook(pinjocRouter.getOrderBookAddress(usdc, weth, "MAY", 2025));
-        (uint256 id, address trader, uint256 amountOrderQueue, uint256 collateralAmountOrderQueue, , , ) = orderBook.orderBook(5e16, Side.SELL, 0);
-
-        assertEq(IERC20(lendingPool.pinjocToken()).balanceOf(lender), amount);
-        assertEq(IERC20(usdc).balanceOf(lender), lenderDefaultBalance - amount);
-
-        assertEq(IERC20(usdc).balanceOf(borrower), amount);
-        assertEq(IERC20(weth).balanceOf(address(lendingPool)), borrowerDefaultCollateral);
-
-        assertEq(amountOrderQueue, borrowerDefaultBalance - amount);
-        // assertEq(collateralAmountOrderQueue, 0);
+        assertEq(IERC20(usdc).balanceOf(lender), lenderDefaultBalance - lendAmount);
     }
 
-    function test_BorrowLimitOrder_Matched() public {
-        setUp_LendLimitOrder();
+    function test_BorrowOrder() public {
+        uint256 borrowAmount = 1000e6; // 1000USDC
+        uint256 collateralAmount = 1e18; // 1WETH = 2500USDC
 
-        uint256 amount = 500e6; // 100USDC
-        uint256 rate = 5e16; // 5% APY
-        uint256 maturity = block.timestamp + 90 days;
-        string memory maturityMonth = "MAY";
-        uint256 maturityYear = 2025;
-        LendingOrderType lendingOrderType = LendingOrderType.BORROW;
+        setUp_BorrowOrder(borrowAmount, collateralAmount);
 
-        vm.startPrank(borrower);
-        IERC20(weth).approve(address(pinjocRouter), borrowerDefaultCollateral);
-        pinjocRouter.placeOrder(
-            usdc,
-            weth,
-            amount,
-            borrowerDefaultCollateral,
-            rate,
-            maturity,
-            maturityMonth,
-            maturityYear,
-            lendingOrderType
-        );
-        vm.stopPrank();
+        (, address trader, uint256 amount, uint256 collateral, , , Status status) = orderBook.orderQueue(5e16, Side.SELL, 0);
+        assertEq(trader, borrower);
+        assertEq(amount, borrowAmount);
+        assertEq(collateral, collateralAmount);
+        assertEq(uint256(status), uint256(Status.OPEN));
 
-        MockGTXOrderBook orderBook = MockGTXOrderBook(pinjocRouter.getOrderBookAddress(usdc, weth, "MAY", 2025));
-        (uint256 id, address trader, uint256 amountOrderQueue, uint256 collateralAmountOrderQueue, , , ) = orderBook.orderBook(5e16, Side.BUY, 0);
-        console.log("order queue", id, " ", trader);
+        assertEq(IERC20(weth).balanceOf(borrower), borrowerDefaultCollateral - collateralAmount);
+    }
 
-        assertEq(IERC20(lendingPool.pinjocToken()).balanceOf(lender), amount);
+    function test_PlaceOrder_BothMatchedFully() public {
+        uint256 borrowAmount = 1000e6; // 1000USDC
+        uint256 collateralAmount = 1e18; // 1WETH = 2500USDC
+
+        setUp_BorrowOrder(borrowAmount, collateralAmount);
+        setUp_LendOrder(borrowAmount);
+        
+        // Check borrower balance
+        assertEq(IERC20(usdc).balanceOf(borrower), borrowAmount);
+        assertEq(IERC20(weth).balanceOf(borrower), borrowerDefaultCollateral - collateralAmount);
+
+        // Check borrower data on lending pool
+        assertEq(lendingPool.totalBorrowAssets(), borrowAmount);
+        assertEq(lendingPool.totalBorrowShares(), borrowAmount);
+        assertEq(lendingPool.userBorrowShares(borrower), borrowAmount);
+        assertEq(lendingPool.userCollaterals(borrower), collateralAmount);
+
+        // Check lender balance
+        assertEq(IERC20(lendingPool.pinjocToken()).balanceOf(lender), borrowAmount);
+        assertEq(IERC20(usdc).balanceOf(lender), lenderDefaultBalance - borrowAmount);
+
+        // Check lender data on lending pool
+        assertEq(lendingPool.totalSupplyAssets(), borrowAmount);
+        assertEq(lendingPool.totalSupplyShares(), borrowAmount);
+    }
+
+    function test_PlaceOrder_OnlyLendMatchedFully() public {
+        uint256 borrowAmount = 2000e6; // 2000USDC
+        uint256 collateralAmount = 1e18; // 1WETH = 2500USDC
+        uint256 supplyAmount = 1000e6; // 1000USDC
+
+        setUp_BorrowOrder(borrowAmount, collateralAmount);
+        setUp_LendOrder(supplyAmount);
+        
+        // Check borrower balance
+        assertEq(IERC20(usdc).balanceOf(borrower), supplyAmount);
+        assertEq(IERC20(weth).balanceOf(borrower), borrowerDefaultCollateral - collateralAmount);
+
+        // Check borrower data on lending pool
+        assertEq(lendingPool.totalBorrowAssets(), supplyAmount);
+        assertEq(lendingPool.totalBorrowShares(), supplyAmount);
+        assertEq(lendingPool.userBorrowShares(borrower), supplyAmount);
+        assertEq(lendingPool.userCollaterals(borrower), collateralAmount * supplyAmount / borrowAmount);
+
+        // Check borrower order queue
+        (, address trader, uint256 amount, , , , Status status) = orderBook.orderQueue(5e16, Side.SELL, 0);
+        assertEq(trader, borrower);
+        assertEq(amount, borrowAmount * supplyAmount / borrowAmount);
+        assertEq(uint256(status), uint256(Status.PARTIALLY_FILLED));
+
+        // Check lender balance
+        assertEq(IERC20(lendingPool.pinjocToken()).balanceOf(lender), supplyAmount);
+        assertEq(IERC20(usdc).balanceOf(lender), lenderDefaultBalance - supplyAmount);
+
+        // Check lender data on lending pool
+        assertEq(lendingPool.totalSupplyAssets(), supplyAmount);
+        assertEq(lendingPool.totalSupplyShares(), supplyAmount);
+    }
+
+    function test_PlaceOrder_OnlyBorrowMatchedFully() public {
+        uint256 borrowAmount = 1000e6; // 1000USDC
+        uint256 collateralAmount = 1e18; // 1WETH = 2500USDC
+        uint256 supplyAmount = 2000e6; // 2000USDC
+
+        setUp_BorrowOrder(borrowAmount, collateralAmount);
+        setUp_LendOrder(supplyAmount);
+        
+        // Check borrower balance
+        assertEq(IERC20(usdc).balanceOf(borrower), borrowAmount);
+        assertEq(IERC20(weth).balanceOf(borrower), borrowerDefaultCollateral - collateralAmount);
+
+        // Check borrower data on lending pool
+        assertEq(lendingPool.totalBorrowAssets(), borrowAmount);
+        assertEq(lendingPool.totalBorrowShares(), borrowAmount);
+        assertEq(lendingPool.userBorrowShares(borrower), borrowAmount);
+        assertEq(lendingPool.userCollaterals(borrower), collateralAmount);
+
+        // Check lender balance
+        assertEq(IERC20(lendingPool.pinjocToken()).balanceOf(lender), borrowAmount);
         assertEq(IERC20(usdc).balanceOf(lender), 0);
 
-        assertEq(IERC20(usdc).balanceOf(borrower), amount);
-        assertEq(IERC20(weth).balanceOf(address(lendingPool)), borrowerDefaultCollateral);
-
-        // assertEq(amountOrderQueue, lenderDefaultBalance - amount);
-        // assertEq(collateralAmountOrderQueue, 0);
+        // Check lender data on lending pool
+        assertEq(lendingPool.totalSupplyAssets(), borrowAmount);
+        assertEq(lendingPool.totalSupplyShares(), borrowAmount);
     }
+}
 
-    function test_CancelAfterLend() public {
-        setUp_LendLimitOrder();
+contract PinjocRouterCancelOrderTest is PinjocRouterBaseTest {
+    
+    function test_CancelLendOrder() public {
+        uint256 lendAmount = 1000e6; // 1000USDC
 
-        MockGTXOrderBook orderBook = MockGTXOrderBook(pinjocRouter.getOrderBookAddress(usdc, weth, "MAY", 2025));
-        (uint256 id, address trader, , , , , ) = orderBook.orderBook(5e16, Side.BUY, 0);
-        console.log("order queue lend", id, " ", trader);
+        setUp_LendOrder(lendAmount);
 
+        MockGTXOBLending.Order[] memory userOrders = orderBook.getUserOrders(lender);
+        assertEq(userOrders.length, 1);
+        assertEq(userOrders[0].trader, lender);
+        assertEq(uint256(userOrders[0].status), uint256(Status.OPEN));
+        assertEq(IERC20(usdc).balanceOf(lender), lenderDefaultBalance - lendAmount);
+        
         vm.startPrank(lender);
-        pinjocRouter.cancelOrder(usdc, weth, "MAY", 2025, id);
+        pinjocRouter.cancelOrder(usdc, weth, "MAY", 2025, 0);
         vm.stopPrank();
-
+        
+        userOrders = orderBook.getUserOrders(lender);
+        assertEq(userOrders.length, 1);
+        assertEq(userOrders[0].trader, lender);
+        assertEq(uint256(userOrders[0].status), uint256(Status.CANCELLED));
         assertEq(IERC20(usdc).balanceOf(lender), lenderDefaultBalance);
     }
 
-    function test_CancelAfterBorrow() public {
-        setUp_BorrowLimitOrder();
+    function test_CancelBorrowOrder() public {
+        uint256 borrowAmount = 1000e6; // 1000USDC
+        uint256 collateralAmount = 1e18; // 1WETH = 2500USDC
 
-        MockGTXOrderBook orderBook = MockGTXOrderBook(pinjocRouter.getOrderBookAddress(usdc, weth, "MAY", 2025));
-        (uint256 id, address trader, , , , , ) = orderBook.orderBook(5e16, Side.SELL, 0);
-        console.log("order queue borrow", id, " ", trader);
+        setUp_BorrowOrder(borrowAmount, collateralAmount);
 
+        MockGTXOBLending.Order[] memory userOrders = orderBook.getUserOrders(borrower);
+        assertEq(userOrders.length, 1);
+        assertEq(userOrders[0].trader, borrower);
+        assertEq(uint256(userOrders[0].status), uint256(Status.OPEN));
+        assertEq(IERC20(usdc).balanceOf(borrower), 0);
+        assertEq(IERC20(weth).balanceOf(borrower), borrowerDefaultCollateral - collateralAmount);
+        
         vm.startPrank(borrower);
-        pinjocRouter.cancelOrder(usdc, weth, "MAY", 2025, id);
+        pinjocRouter.cancelOrder(usdc, weth, "MAY", 2025, 0);
         vm.stopPrank();
-
+        
+        userOrders = orderBook.getUserOrders(borrower);
+        assertEq(userOrders.length, 1);
+        assertEq(userOrders[0].trader, borrower);
+        assertEq(uint256(userOrders[0].status), uint256(Status.CANCELLED));
+        assertEq(IERC20(usdc).balanceOf(borrower), 0);
         assertEq(IERC20(weth).balanceOf(borrower), borrowerDefaultCollateral);
     }
-
-
 }

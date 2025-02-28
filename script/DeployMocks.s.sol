@@ -10,91 +10,10 @@ import {LendingPool} from "../src/LendingPool.sol";
 import {PinjocRouter} from "../src/PinjocRouter.sol";
 import {LendingOrderType} from "../src/types/Types.sol";
 
+import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+
 contract DeployMocks is DeployHelpers {
-    function saveDeploymentToFile(
-        address musdc,
-        address[] memory collateralAddresses,
-        address[] memory oracleAddresses,
-        address lendingPoolManager,
-        address pinjocRouter,
-        address[] memory lendingPools
-    ) internal {
-        string memory json = "{\n";
-        json = string(
-            abi.encodePacked(json, '  "musdc": "', toHexString(musdc), '",\n')
-        );
-
-        json = string(abi.encodePacked(json, '  "collaterals": [\n'));
-        for (uint256 i = 0; i < collateralAddresses.length; i++) {
-            json = string(
-                abi.encodePacked(
-                    json,
-                    '    "',
-                    toHexString(collateralAddresses[i]),
-                    '"'
-                )
-            );
-            if (i < collateralAddresses.length - 1)
-                json = string(abi.encodePacked(json, ",\n"));
-        }
-        json = string(abi.encodePacked(json, "\n  ],\n"));
-
-        json = string(abi.encodePacked(json, '  "oracles": [\n'));
-        for (uint256 i = 0; i < oracleAddresses.length; i++) {
-            json = string(
-                abi.encodePacked(
-                    json,
-                    '    "',
-                    toHexString(oracleAddresses[i]),
-                    '"'
-                )
-            );
-            if (i < oracleAddresses.length - 1)
-                json = string(abi.encodePacked(json, ",\n"));
-        }
-        json = string(abi.encodePacked(json, "\n  ],\n"));
-
-        json = string(
-            abi.encodePacked(
-                json,
-                '  "lendingPoolManager": "',
-                toHexString(lendingPoolManager),
-                '",\n'
-            )
-        );
-        json = string(
-            abi.encodePacked(
-                json,
-                '  "pinjocRouter": "',
-                toHexString(pinjocRouter),
-                '",\n'
-            )
-        );
-
-        json = string(abi.encodePacked(json, '  "lendingPools": [\n'));
-        for (uint256 i = 0; i < lendingPools.length; i++) {
-            json = string(
-                abi.encodePacked(
-                    json,
-                    '    "',
-                    toHexString(lendingPools[i]),
-                    '"'
-                )
-            );
-            if (i < lendingPools.length - 1)
-                json = string(abi.encodePacked(json, ",\n"));
-        }
-        json = string(abi.encodePacked(json, "\n  ]\n}"));
-
-        vm.writeFile("deployments.json", json);
-        console.log(unicode"✅ Deployment saved to deployments.json");
-    }
-
-    function toHexString(
-        address _address
-    ) internal pure returns (string memory) {
-        return vm.toString(_address);
-    }
 
     function run() public {
         uint256 deployerKey = getDeployerKey();
@@ -105,29 +24,22 @@ contract DeployMocks is DeployHelpers {
 
         // Deploy Mock Tokens
         console.log(unicode"🪙 Deploying Mock Tokens...");
-        MockToken musdc = MockToken(0x0F848482cC12EA259DA229e7c5C4949EdA7E6475);
+        MockToken musdc = MockToken(0x0F848482cC12EA259DA229e7c5C4949EdA7E6475); // USDC
         console.log(unicode"✅ Mock USDC deployed at: %s", address(musdc));
 
         MockToken[5] memory collaterals = [
-            MockToken(0xa8014bB3A0020C0FF326Ef3AF3E1c55F6e5B25c7),
-            MockToken(0xf14442CCE4511D0B5DC34425bceA50Ca67626c3a),
-            MockToken(0x12eC2c5144CF6feCCE8927cB1F748e9f60a97682),
-            MockToken(0x19477F1e5515AF38E6C85F14C43DEb538d475524),
-            MockToken(0x4b95Ba646c2Ed7fAB76e7C0a04245c61A9d4D686)
+            MockToken(0xa8014bB3A0020C0FF326Ef3AF3E1c55F6e5B25c7), // WETH
+            MockToken(0xf14442CCE4511D0B5DC34425bceA50Ca67626c3a), // WBTC
+            MockToken(0x12eC2c5144CF6feCCE8927cB1F748e9f60a97682), // SOL
+            MockToken(0x19477F1e5515AF38E6C85F14C43DEb538d475524), // LINK
+            MockToken(0x4b95Ba646c2Ed7fAB76e7C0a04245c61A9d4D686)  // AAVE
         ];
 
-        address[] memory collateralAddresses = new address[](
-            collaterals.length
-        );
-        address[] memory oracleAddresses = new address[](collaterals.length);
-        address[] memory lendingPoolAddresses = new address[](
-            collaterals.length
-        );
-
+        string[5] memory collateralSymbols = ["WETH", "WBTC", "SOL", "LINK", "AAVE"];
         for (uint256 i = 0; i < collaterals.length; i++) {
             console.log(
                 unicode"✅ %s deployed at: %s",
-                collaterals[i].symbol(),
+                collateralSymbols[i],
                 address(collaterals[i])
             );
         }
@@ -173,13 +85,13 @@ contract DeployMocks is DeployHelpers {
         }
 
         // Minting otomatis ke wallet testnet
-        address[1] memory testWallets = [
-            0x4176377dA5287Ec4eE6e60b1cA16210FC0Ab27FA
+        address[2] memory testWallets = [
+            0xEa737Db924BA80639cbab7609570F3127e1a2Be7,
+            0x116De0cDA2b985797bc24c899a697cEb2f72B445
         ];
 
         uint256 mintAmountMusdc = 10_000e6;
-        uint256 mintAmountCollateral = 5e18;
-
+        uint256 mintAmountCollateral = 5000e18;
         console.log(unicode"\n💰 Minting Tokens to Test Wallets...");
         for (uint256 i = 0; i < testWallets.length; i++) {
             musdc.mint(testWallets[i], mintAmountMusdc);
@@ -209,124 +121,82 @@ contract DeployMocks is DeployHelpers {
             address(lendingPoolManager)
         );
 
+        string[4] memory maturityMonth = ["MAY", "AUG", "NOV", "FEB"];
+        uint256[4] memory maturityYear = [uint256(2025), uint256(2025), uint256(2025), uint256(2026)];
+        uint256[2][4] memory rate = [
+            [uint256(5e16), uint256(7e16)],
+            [uint256(10e16), uint256(12e16)],
+            [uint256(19e16), uint256(21e16)],
+            [uint256(26e16), uint256(30e16)]
+        ];
+        uint256[5] memory collateralAmount = [
+            uint256(100e18),    // WETH
+            uint256(100e8),     // WBTC 
+            uint256(1000e18),   // SOL
+            uint256(10_000e18), // LINK
+            uint256(1000e18)    // AAVE
+        ];
+
         console.log(unicode"\n🏦 Deploying PinjocRouter...");
-        PinjocRouter pinjocRouter = new PinjocRouter(
-            address(lendingPoolManager)
-        );
+        PinjocRouter pinjocRouter = new PinjocRouter(address(lendingPoolManager));
         console.log(
             unicode"✅ PinjocRouter deployed at: %s",
             address(pinjocRouter)
         );
 
-        // Approve Tokens
-        console.log(unicode"\n🔑 Approving MUSDC for PinjocRouter...");
-        musdc.approve(address(pinjocRouter), type(uint256).max);
-        console.log(unicode"✅ Approved MUSDC for PinjocRouter");
+        for (uint256 i = 0; i < collaterals.length; i++) {
+            for (uint256 j = 0; j < maturityMonth.length; j++) {
 
-        console.log(unicode"\n🔑 Approving Tokens for LendingPoolManager...");
-        musdc.approve(address(lendingPoolManager), type(uint256).max);
+                console.log(unicode"\n📌 createOrderBook...");
+                pinjocRouter.createOrderBook(
+                    address(musdc),
+                    address(collaterals[i]),
+                    maturityMonth[j],
+                    maturityYear[j]
+                );
 
-        // Deploy Lending Pools and Place Orders
-        LendingPool[] memory lendingPools = new LendingPool[](2);
+                console.log(unicode"\n📌 createLendingPool...");
+                lendingPoolManager.createLendingPool(
+                    address(pinjocRouter),
+                    address(musdc),
+                    address(collaterals[i]),
+                    5e16,
+                    block.timestamp + ((j+1) * 90 days),
+                    maturityMonth[j],
+                    maturityYear[j],
+                    address(oracles[i])
+                );
 
-        // Calculate required collateral (Added 10% buffer)
-        uint256 requiredCollateral = 1e18;
+                console.log(unicode"\n📌 placeOrder BORROW...");
+                pinjocRouter.placeOrder(
+                    address(musdc),
+                    address(collaterals[i]),
+                    10_000e6,
+                    collateralAmount[i],
+                    rate[j][0],
+                    block.timestamp + ((j+1) * 90 days),
+                    maturityMonth[j],
+                    maturityYear[j],
+                    LendingOrderType.BORROW
+                );
 
-        collaterals[0].mint(owner, requiredCollateral);
-        console.log("Owner MWETH Balance: %s", collaterals[0].balanceOf(owner));
-
-        collaterals[0].approve(address(pinjocRouter), type(uint256).max);
-        console.log(
-            unicode"✅ Approved %s for PinjocRouter",
-            collaterals[0].symbol()
-        );
-
-        collaterals[0].approve(address(lendingPoolManager), type(uint256).max);
-        console.log(
-            unicode"✅ Approved %s for LendingPoolManager",
-            collaterals[0].symbol()
-        );
-
-        console.log(unicode"\n📌 createOrderBook...");
-        pinjocRouter.createOrderBook(
-            address(musdc),
-            address(collaterals[0]),
-            "MAY",
-            2025
-        );
-
-        console.log(unicode"\n📌 Deploying Lending Pools...");
-        lendingPools[0] = LendingPool(
-            lendingPoolManager.createLendingPool(
-                address(pinjocRouter),
-                address(musdc),
-                address(collaterals[0]),
-                5e16,
-                block.timestamp + 90 days,
-                "MAY",
-                2025,
-                address(oracles[0])
-            )
-        );
-        lendingPools[1] = LendingPool(
-            lendingPoolManager.createLendingPool(
-                address(pinjocRouter),
-                address(musdc),
-                address(collaterals[0]),
-                7e16,
-                block.timestamp + 90 days,
-                "MAY",
-                2025,
-                address(oracles[0])
-            )
-        );
-
-        console.log(unicode"\n📌 placeOrder...");
-
-        // Place Lending Order
-        pinjocRouter.placeOrder(
-            address(musdc),
-            address(collaterals[0]),
-            1000e6,
-            0,
-<<<<<<< HEAD
-            7e16, // 7% APY
-=======
-            7e16, // 5% APY
->>>>>>> 5f59bf50bdc1811dfb9b6ee1016c82351a6c31aa
-            block.timestamp + 90 days,
-            "MAY",
-            2025,
-            LendingOrderType.LEND
-        );
-
-        // Place Borrow Order (With Fixed Collateral Calculation)
-        pinjocRouter.placeOrder(
-            address(musdc),
-            address(collaterals[0]),
-            1250e6,
-            requiredCollateral,
-            5e16, // 5% APY
-            block.timestamp + 90 days,
-            "MAY",
-            2025,
-            LendingOrderType.BORROW
-        );
+                console.log(unicode"\n📌 placeOrder LEND...");
+                pinjocRouter.placeOrder(
+                    address(musdc),
+                    address(collaterals[i]),
+                    10_000e6,
+                    0,
+                    rate[j][1],
+                    block.timestamp + ((j+1) * 90 days),
+                    maturityMonth[j],
+                    maturityYear[j],
+                    LendingOrderType.LEND
+                );
+            }
+        }
 
         console.log(unicode"\n🎉 DEPLOYMENT COMPLETED 🎉");
-        // for (uint256 i = 0; i < collaterals.length; i++) {
-        //     collateralAddresses[i] = address(collaterals[i]);
-        //     oracleAddresses[i] = address(oracles[i]);
-        //     lendingPoolAddresses[i] = address(lendingPools[i]);
-        // }
-        // saveDeploymentToFile(
-        //     address(musdc),
-        //     collateralAddresses,
-        //     oracleAddresses,
-        //     address(lendingPoolManager),
-        //     address(pinjocRouter),
-        //     lendingPoolAddresses
-        // );
+
         vm.stopBroadcast();
     }
 }

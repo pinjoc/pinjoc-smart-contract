@@ -6,9 +6,9 @@ import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/Reentrancy
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-import {MockGTXOrderBook} from "./mocks/MockGTXOrderBook.sol";
+import {MockGTXOBLending} from "./mocks/MockGTXOBLending.sol";
 import {LendingOrderType, Status} from "./types/Types.sol";
-import {IMockGTXOrderBook} from "./interfaces/IMockGTXOrderBook.sol";
+import {IMockGTXOBLending} from "./interfaces/IMockGTXOBLending.sol";
 import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
 import {ILendingPool} from "./interfaces/ILendingPool.sol";
 import {IMockOracle} from "./interfaces/IMockOracle.sol";
@@ -71,7 +71,7 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
                     getOrderBookSymbol(_collateralToken,_maturityMonth,_maturityYear)
                 )
             )
-        ] = address(new MockGTXOrderBook(_debtToken, _collateralToken));
+        ] = address(new MockGTXOBLending(_debtToken, _collateralToken));
     }
 
     function getOrderBookAddress(
@@ -123,10 +123,7 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
         uint256 _borrowedAmount,
         uint256 _collateralAmount
     ) internal view {
-        require(
-            IERC20(_collateralToken).balanceOf(msg.sender) >= _collateralAmount,
-            "Balance not enough"
-        );
+        if (IERC20(_collateralToken).balanceOf(msg.sender) < _collateralAmount) revert BalanceNotEnough(_collateralToken, IERC20(_collateralToken).balanceOf(msg.sender), _collateralAmount);
         address lendingPoolAddress = lendingPoolManager.getLendingPool(
             _debtToken,
             _collateralToken,
@@ -170,40 +167,24 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
             _maturityYear
         );
         if (orderBookAddr == address(0)) revert OrderBookNotFound();
-        IMockGTXOrderBook orderBook = IMockGTXOrderBook(orderBookAddr);
+        IMockGTXOBLending orderBook = IMockGTXOBLending(orderBookAddr);
 
         // Send token to the order book
         if (_lendingOrderType == LendingOrderType.LEND) {
-            require(
-                IERC20(_debtToken).balanceOf(msg.sender) >= _amount,
-                "Balance not enough"
-            );
+            if (IERC20(_debtToken).balanceOf(msg.sender) < _amount) revert BalanceNotEnough(_debtToken, IERC20(_debtToken).balanceOf(msg.sender), _amount);
             IERC20(_debtToken).transferFrom(msg.sender, address(this), _amount);
             IERC20(_debtToken).approve(orderBookAddr, _amount);
         } else {
-            _isHealthy(
-                _debtToken,
-                _collateralToken,
-                _rate,
-                _maturityMonth,
-                _maturityYear,
-                _amount,
-                _collateralAmount
-            );
+            _isHealthy(_debtToken, _collateralToken, _rate, _maturityMonth, _maturityYear, _amount, _collateralAmount);
 
             IERC20(_collateralToken).transferFrom(msg.sender, address(this), _collateralAmount);
             IERC20(_collateralToken).approve(orderBookAddr, _collateralAmount);
         }
 
         (
-            uint256 orderId, 
-            address lender, 
-            address borrower, 
-            uint256 debtAmount,
-            uint256 borrowerAmount,
-            uint256 collateralAmount,
-            Status status
-        ) = orderBook.placeLimitOrder(
+            IMockGTXOBLending.MatchedInfo[] memory matchedLendOrders, 
+            IMockGTXOBLending.MatchedInfo[] memory matchedBorrowOrders
+        ) = orderBook.placeOrder(
             msg.sender,
             _amount,
             _collateralAmount,
@@ -211,37 +192,44 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
             _lendingOrderType.convertToSide()
         );
 
-        emit OrderPlaced(
-            orderId,
-            _debtToken,
-            _collateralToken,
-            _amount,
-            _rate,
-            _maturity,
-            _maturityMonth,
-            _maturityYear,
-            _lendingOrderType,
-            status
+        address lendingPoolAddress = lendingPoolManager.getLendingPool(
+            _debtToken, _collateralToken, _rate, _maturityMonth, _maturityYear
         );
+        if (lendingPoolAddress == address(0)) revert LendingPoolNotFound();
 
-        if (status == Status.FILLED || status == Status.PARTIALLY_FILLED) {
-            address lendingPoolAddress = lendingPoolManager.getLendingPool(
-                _debtToken,
-                _collateralToken,
-                _rate,
-                _maturityMonth,
-                _maturityYear
-            );
-            if (lendingPoolAddress == address(0)) revert LendingPoolNotFound();
+        if (_lendingOrderType == LendingOrderType.LEND && matchedLendOrders.length > 0) {
 
-            if (debtAmount < borrowerAmount) borrowerAmount = debtAmount;
+            uint256 partialDebt = (matchedLendOrders[0].amount * matchedLendOrders[0].percentMatch) / 1e18;
+            ILendingPool(lendingPoolAddress).supply(matchedLendOrders[0].trader, partialDebt);
 
-            ILendingPool(lendingPoolAddress).supply(lender, debtAmount);
-            ILendingPool(lendingPoolAddress).supplyCollateral(borrower, collateralAmount);
-            ILendingPool(lendingPoolAddress).borrow(borrower, borrowerAmount);
+            emit OrderPlaced(matchedLendOrders[0].orderId, _debtToken, _collateralToken, _amount, _rate, _maturity, _maturityMonth, _maturityYear, _lendingOrderType, matchedLendOrders[0].status);
 
-            orderBook.transferFrom(lender, borrower, borrowerAmount, Side.BUY);
-            orderBook.transferFrom(borrower, lendingPoolAddress, collateralAmount, Side.SELL);
+            for (uint256 i = 0; i < matchedBorrowOrders.length; i++) {
+                uint256 partialCollat = (matchedBorrowOrders[i].collateralAmount * matchedBorrowOrders[i].percentMatch) / 1e18;
+                uint256 portionOfDebt = (matchedBorrowOrders[i].amount * matchedBorrowOrders[i].percentMatch) / 1e18;
+
+                ILendingPool(lendingPoolAddress).supplyCollateral(matchedBorrowOrders[i].trader, partialCollat);
+                ILendingPool(lendingPoolAddress).borrow(matchedBorrowOrders[i].trader, portionOfDebt);
+
+                orderBook.transferFrom(matchedBorrowOrders[i].trader, lendingPoolAddress, partialCollat, Side.SELL);
+                orderBook.transferFrom(matchedLendOrders[0].trader, matchedBorrowOrders[i].trader, portionOfDebt, Side.BUY);
+            }
+        } else if (_lendingOrderType == LendingOrderType.BORROW && matchedBorrowOrders.length > 0) {
+
+            uint256 partialCollat = (matchedBorrowOrders[0].collateralAmount * matchedBorrowOrders[0].percentMatch) / 1e18;
+            uint256 portionOfDebt = (matchedBorrowOrders[0].amount * matchedBorrowOrders[0].percentMatch) / 1e18;
+            ILendingPool(lendingPoolAddress).supplyCollateral(matchedBorrowOrders[0].trader, partialCollat);
+
+            for (uint256 i = 0; i < matchedLendOrders.length; i++) {
+                uint256 portionOfDebtLend = (matchedLendOrders[i].amount * matchedLendOrders[i].percentMatch) / 1e18;
+
+                ILendingPool(lendingPoolAddress).supply(matchedLendOrders[i].trader, portionOfDebtLend);
+
+                orderBook.transferFrom(matchedLendOrders[i].trader, matchedBorrowOrders[0].trader, portionOfDebtLend, Side.BUY);
+            }
+            
+            ILendingPool(lendingPoolAddress).borrow(matchedBorrowOrders[0].trader, portionOfDebt);
+            orderBook.transferFrom(matchedBorrowOrders[0].trader, lendingPoolAddress, partialCollat, Side.SELL);
         }
     }
 
@@ -259,7 +247,7 @@ contract PinjocRouter is Ownable, ReentrancyGuard {
             _maturityYear
         );
         if (orderBookAddr == address(0)) revert OrderBookNotFound();
-        IMockGTXOrderBook orderBook = IMockGTXOrderBook(orderBookAddr);
+        IMockGTXOBLending orderBook = IMockGTXOBLending(orderBookAddr);
         orderBook.cancelOrder(msg.sender, _orderId);
 
         emit OrderCancelled(_orderId, Status.CANCELLED);

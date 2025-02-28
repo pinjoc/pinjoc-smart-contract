@@ -422,7 +422,7 @@
     {
       "hash": "0x92847ced7b0ec1c9f0c1aae70ab92a2af01c7133d109c5c62e283bcbfbec1c00",
       "transactionType": "CREATE",
-      "contractName": "MockGTXOrderBook",
+      "contractName": "MockGTXOBLending",
       "contractAddress": "0xd7997ab29d062db4fc9f7105fc4f0becf063f816",
       "function": null,
       "arguments": null,
