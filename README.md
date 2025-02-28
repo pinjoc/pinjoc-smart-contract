@@ -2,7 +2,7 @@
 
 ## 📜 Description
 
-PINJOC is a decentralized fixed-rate lending protocol that revolutionizes DeFi lending by implementing a market-driven interest rate mechanism. Built on Ethereum, the protocol leverages CLOB (Central Limit Order Book) technology from GTX DEX to ensure efficient price discovery and optimal interest rate determination based on real-time supply and demand dynamics.
+PINJOC is a decentralized fixed-rate lending protocol that revolutionizes DeFi lending by implementing a market-driven interest rate mechanism. Built on RISE network, the protocol leverages CLOB (Central Limit Order Book) technology from GTX DEX to ensure efficient price discovery and optimal interest rate determination based on real-time supply and demand dynamics.
 
 ---
 
