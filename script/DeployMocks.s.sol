@@ -160,7 +160,19 @@ contract DeployMocks is DeployHelpers {
                     address(pinjocRouter),
                     address(musdc),
                     address(collaterals[i]),
-                    5e16,
+                    rate[j][0],
+                    block.timestamp + ((j+1) * 90 days),
+                    maturityMonth[j],
+                    maturityYear[j],
+                    address(oracles[i])
+                );
+
+                console.log(unicode"\n📌 createLendingPool...");
+                lendingPoolManager.createLendingPool(
+                    address(pinjocRouter),
+                    address(musdc),
+                    address(collaterals[i]),
+                    rate[j][1],
                     block.timestamp + ((j+1) * 90 days),
                     maturityMonth[j],
                     maturityYear[j],
@@ -168,6 +180,7 @@ contract DeployMocks is DeployHelpers {
                 );
 
                 console.log(unicode"\n📌 placeOrder BORROW...");
+                musdc.approve(address(pinjocRouter), type(uint256).max);
                 pinjocRouter.placeOrder(
                     address(musdc),
                     address(collaterals[i]),
@@ -181,6 +194,7 @@ contract DeployMocks is DeployHelpers {
                 );
 
                 console.log(unicode"\n📌 placeOrder LEND...");
+                collaterals[i].approve(address(pinjocRouter), type(uint256).max);
                 pinjocRouter.placeOrder(
                     address(musdc),
                     address(collaterals[i]),
